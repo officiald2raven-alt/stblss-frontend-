@@ -30,18 +30,22 @@ stblss/
     ├── index.css
     ├── lib/
     │   ├── stblss.js
+    │   ├── preFlight.js
     │   └── utils.js
-    │   └── PageNotFound.jsx
     ├── pages/
     │   ├── Generator.jsx
-    │   └── Checkout.jsx
+    │   ├── Checkout.jsx
+    │   └── Check.jsx
     └── components/
         ├── PayButton.jsx
         ├── PaidConfirmation.jsx
+        ├── InvoiceStatus.jsx
         ├── InvoiceField.jsx
         ├── InfoTooltip.jsx
         ├── CopyButton.jsx
+        ├── RecipientAddressInput.jsx
         ├── HowItWorks.jsx
+        ├── CheckResult.jsx
         └── Footer.jsx
 ```
 
@@ -53,7 +57,7 @@ stblss/
 {
   "name": "stblss",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -65,7 +69,8 @@ stblss/
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.26.0",
     "framer-motion": "^11.16.4",
-    "lucide-react": "^0.475.0"
+    "lucide-react": "^0.475.0",
+    "js-sha3": "^0.9.3"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
@@ -269,7 +274,7 @@ dist-ssr
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>STBLSS</title>
-    <meta name="description" content="An open-source, stateless stablecoin payment terminal. Generate and collect stablecoin invoices without backend tracking. Non-custodial." />
+    <meta name="description" content="An open-source, stateless stablecoin payment terminal. Generate and collect stablecoin invoices without backend tracking. Non-custodial. EIP-55 typo protection + pre-flight address check." />
   </head>
   <body>
     <div id="root"></div>
@@ -283,15 +288,16 @@ dist-ssr
 ````markdown
 # STBLSS
 
-An open-source, fully stateless, non-custodial stablecoin payment terminal.
+An open-source, fully stateless, non-custodial stablecoin payment terminal — built to kill transaction anxiety before you hit send.
 
 STBLSS lets you generate anonymous stablecoin payment links and collect payments with an automated 99% recipient / 1% terminal fee split. There are no accounts, no server databases, and no tracking cookies. All transaction signing happens exclusively via your browser wallet.
 
-## How it works
+## What it does
 
-1. **Generate a link** — paste your 0x wallet address, pick a network and token, enter the amount.
-2. **Share the link** — copy and send it to your payer through whatever channel you choose (email, DM, invoice, carrier pigeon).
-3. **Collect instantly** — the payer opens the link, clicks Pay, and their wallet sends two ERC-20 transfers: 99% to you, 1% terminal fee.
+1. **Generate a link** — paste your 0x wallet address, pick a network and token, enter the amount (optional memo + due date). EIP-55 checksum validation hard-blocks recipient typos before a link can even be created.
+2. **Run a pre-flight check (optional)** — before paying, paste the recipient address on `/check` and STBLSS reads the chain in your browser: format, checksum, on-chain history, balance, and cross-chain activity to catch wrong-network sends before you broadcast.
+3. **Share the link** — copy and send it to your payer through whatever channel you choose (email, DM, invoice, carrier pigeon).
+4. **Collect anxiety-free** — the payer opens the link, sees the recipient address in plain text with a one-tap block-explorer verify, then pays from their own wallet. Two ERC-20 transfers: 99% to you, 1% terminal fee. STBLSS never holds funds and only flips to "complete" after the network confirms each leg on-chain.
 
 STBLSS sends zero emails. You copy the link and send it yourself.
 
@@ -366,6 +372,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import Generator from './pages/Generator';
 import Checkout from './pages/Checkout';
+import Check from './pages/Check';
 import PageNotFound from './lib/PageNotFound';
 
 // STBLSS is fully stateless and client-side.
@@ -376,6 +383,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Generator />} />
         <Route path="/checkout" element={<Checkout />} />
+        <Route path="/check" element={<Check />} />
         <Route path="*" element={<PageNotFound />} />
       </Routes>
     </Router>
@@ -581,6 +589,187 @@ export function shortAddress(addr = "") {
 export function isEvmAddress(addr = "") {
   return /^0x[a-fA-F0-9]{40}$/.test(addr.trim());
 }
+
+// EIP-55 mixed-case checksum verification.
+// Every EVM address carries a built-in checksum encoded in the casing of its
+// hex letters. If a single character is mistyped (but still valid hex + length),
+// the recomputed checksum won't match and we can flag it — pure math, no
+// network calls, runs entirely in the browser. This is the strongest no-backend
+// guard against recipient setup errors (the one hole format-validation alone
+// cannot close). Uses `js-sha3` keccak256; all-lowercase or all-uppercase
+// addresses have NO checksum encoded, so they are treated as "unverified" (null).
+import { keccak_256 } from "js-sha3";
+export function isChecksumValid(addr = "") {
+  const raw = addr.trim();
+  if (!/^0x[a-fA-F0-9]{40}$/.test(raw)) return false;
+  // All-lowercase or all-uppercase = no checksum encoded → cannot verify.
+  if (raw === raw.toLowerCase() || raw === raw.toUpperCase()) return null;
+  const hex = raw.slice(2);
+  const hash = keccak_256(hex.toLowerCase());
+  let checksummed = "0x";
+  for (let i = 0; i < hex.length; i++) {
+    const c = hex[i];
+    if (/[0-9]/.test(c)) {
+      checksummed += c;
+    } else {
+      checksummed += parseInt(hash[i], 16) >= 8 ? c.toUpperCase() : c.toLowerCase();
+    }
+  }
+  return checksummed === raw;
+}
+
+// Stateless on-chain "paid" check — reads the chosen network's public RPC
+// directly from the browser and scans recent ERC-20 Transfer logs to the
+// recipient for a transfer whose value matches the expected payout (the 99%
+// amount that lands in the recipient's wallet). No backend, no indexer.
+//
+// Honest limitations (stateless tool + public RPC range limits):
+//   - Only scans a recent block window, so a payment confirmed long ago may
+//     not be found → "unpaid" means "not seen in the recent window", NOT
+//     definitively "never paid".
+//   - If the public RPC rejects the range or fails, returns "unknown".
+export async function checkPaymentStatus(netKey, tokenAddress, recipient, expectedPayoutUnits) {
+  const net = NETWORKS[netKey];
+  if (!net || !net.evm || !tokenAddress || !recipient) return { status: "unknown" };
+  const rpc = net.params.rpcUrls[0];
+  const TRANSFER_TOPIC =
+    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b4ef";
+  const toTopic = "0x" + recipient.toLowerCase().replace(/^0x/, "").padStart(64, "0");
+
+  const rpcCall = async (method, params) => {
+    const res = await fetch(rpc, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+    });
+    const json = await res.json();
+    if (json.error) throw new Error(json.error.message || "rpc error");
+    return json.result;
+  };
+
+  try {
+    const latest = BigInt(await rpcCall("eth_blockNumber", []));
+    const WINDOW = 100000n; // ~1-2 days on L2s
+    const fromBlock = latest > WINDOW ? "0x" + (latest - WINDOW).toString(16) : "0x0";
+    const logs = await rpcCall("eth_getLogs", [{
+      fromBlock,
+      toBlock: "latest",
+      address: tokenAddress,
+      topics: [TRANSFER_TOPIC, null, toTopic],
+    }]);
+    const target = BigInt(expectedPayoutUnits);
+    for (const log of logs || []) {
+      if (!log.data) continue;
+      if (BigInt(log.data) === target) return { status: "paid" };
+    }
+    return { status: "unpaid" };
+  } catch (e) {
+    return { status: "unknown", error: e?.message };
+  }
+}
+```
+
+=== FILE: src/lib/preFlight.js ===
+
+```js
+import { NETWORKS, isEvmAddress, isChecksumValid } from "@/lib/stblss";
+
+// Stateless, in-browser pre-flight check before you send crypto to a pasted address.
+// Reads public RPCs directly: format + EIP-55 typo checks, on-chain history on the
+// selected network, token balance, contract-vs-wallet, and cross-chain presence
+// (the #1 wrong-network signal). No backend, no indexer, no tracking.
+
+const rpc = (url, method, params) =>
+  fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+  })
+    .then((r) => r.json())
+    .then((j) => {
+      if (j.error) throw new Error(j.error.message || "rpc error");
+      return j.result;
+    });
+
+const BALANCE_OF = "0x70a08231"; // balanceOf(address)
+
+export async function preFlightCheck(netKey, token, rawAddr) {
+  const net = NETWORKS[netKey];
+  const addr = rawAddr.trim();
+  const out = { address: addr, netKey, token, checks: [], status: "ok" };
+
+  const add = (label, state, detail) => {
+    out.checks.push({ label, state, detail });
+    const rank = { ok: 0, info: 1, warn: 2, danger: 3 };
+    if (rank[state] > rank[out.status]) out.status = state;
+  };
+
+  if (!net) {
+    add("Network", "danger", "Unknown network selected.");
+    return out;
+  }
+  if (!isEvmAddress(addr)) {
+    add("Address format", "danger", "Not a valid 0x + 40-hex-char Ethereum address. Likely a copy/paste error — do not send.");
+    return out;
+  }
+  add("Address format", "ok", "Valid 0x address (40 hex characters).");
+
+  const ck = isChecksumValid(addr);
+  if (ck === false) {
+    add("EIP-55 checksum", "danger", "Checksum mismatch — at least one character is mistyped. Do not send.");
+  } else if (ck === null) {
+    add("EIP-55 checksum", "info", "Address is all-lowercase or all-uppercase, so no checksum is encoded. Pasting the checksummed (mixed-case) version from your wallet gives typo protection.");
+  } else {
+    add("EIP-55 checksum", "ok", "Checksum matches — no typo detected in the letter casing.");
+  }
+
+  const lower = addr.toLowerCase();
+
+  // On-chain checks for the SELECTED network
+  try {
+    const tokenInfo = net.tokens?.[token];
+    const [nonce, code, balance] = await Promise.all([
+      rpc(net.params.rpcUrls[0], "eth_getTransactionCount", [lower, "latest"]),
+      rpc(net.params.rpcUrls[0], "eth_getCode", [lower, "latest"]),
+      tokenInfo
+        ? rpc(net.params.rpcUrls[0], "eth_call", [{ to: tokenInfo.address, data: BALANCE_OF + lower.slice(2).padStart(64, "0") }, "latest"])
+        : Promise.resolve("0x0"),
+    ]);
+    const nonceN = BigInt(nonce || "0x0");
+    const isContract = (code || "0x") !== "0x";
+    const balN = BigInt(balance || "0x0");
+
+    if (isContract) {
+      add(`On ${net.label}`, "warn", "This address is a smart contract, not a personal wallet. That's normal for exchange deposit addresses — make sure it's YOUR deposit address for the right token and the right network on that exchange.");
+    } else if (nonceN > 0n || balN > 0n) {
+      add(`On ${net.label}`, "ok", `Address has activity on ${net.label}${balN > 0n ? ` and already holds ${token}` : ""}. Looks like a real wallet.`);
+    } else {
+      add(`On ${net.label}`, "warn", `No transaction history and no ${token} balance on ${net.label}. This is the classic signature of a wrong network or wrong recipient — sending here may strand your funds. Double-check the network.`);
+    }
+  } catch (e) {
+    add(`On ${net.label}`, "info", `Couldn't reach ${net.label} RPC to verify on-chain history (${e.message}). Format and checksum checks still apply.`);
+  }
+
+  // Cross-chain: is this same address active on the OTHER networks? (wrong-network signal)
+  for (const [k, n] of Object.entries(NETWORKS)) {
+    if (k === netKey || !n.evm) continue;
+    try {
+      const [oNonce, oCode] = await Promise.all([
+        rpc(n.params.rpcUrls[0], "eth_getTransactionCount", [lower, "latest"]),
+        rpc(n.params.rpcUrls[0], "eth_getCode", [lower, "latest"]),
+      ]);
+      const active = BigInt(oNonce || "0x0") > 0n || (oCode || "0x") !== "0x";
+      if (active) {
+        add("Cross-chain activity", "warn", `This address is active on ${n.label}, but you selected ${net.label}. EVM addresses look identical across networks — sending ${token} on the wrong one can strand it. Confirm the network matches the wallet you intend to pay.`);
+        break;
+      }
+    } catch (e) {
+      /* unreachable chain — skip */
+    }
+  }
+
+  return out;
+}
 ```
 
 === FILE: src/lib/utils.js ===
@@ -616,14 +805,15 @@ export default function PageNotFound() {
 
 ```jsx
 import React, { useState } from "react";
-import { NETWORKS, TOKENS, isEvmAddress } from "@/lib/stblss";
+import { NETWORKS, TOKENS, isEvmAddress, isChecksumValid } from "@/lib/stblss";
 import InvoiceField, { fieldClass } from "@/components/InvoiceField";
 import CopyButton from "@/components/CopyButton";
+import RecipientAddressInput from "@/components/RecipientAddressInput";
 import HowItWorks from "@/components/HowItWorks";
 import Footer from "@/components/Footer";
 
 export default function Generator() {
-  const [form, setForm] = useState({ to: "", net: "base", token: "USDC", amt: "" });
+  const [form, setForm] = useState({ to: "", net: "base", token: "USDC", amt: "", memo: "", due: "" });
   const [link, setLink] = useState("");
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
@@ -635,37 +825,33 @@ export default function Generator() {
       token: form.token,
       amt: form.amt,
     });
+    if (form.memo.trim()) params.set("memo", form.memo.trim());
+    if (form.due) params.set("due", form.due);
     setLink(`${window.location.origin}/checkout?${params.toString()}`);
   };
 
   const addr = form.to.trim();
   const addrValid = isEvmAddress(addr);
-  const valid = addrValid && Number(form.amt) > 0;
+  const checksumBad = isChecksumValid(addr) === false; // EIP-55 mismatch = likely typo → hard block
+  const valid = addrValid && !checksumBad && Number(form.amt) > 0;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <div className="mx-auto max-w-3xl px-6 pt-20">
         <h1 className="text-5xl font-black tracking-tight text-white md:text-7xl">STBLSS</h1>
-        <p className="mt-4 text-lg font-medium text-emerald-400">
-          An Open-Source, Stateless Stablecoin Payment Route.
+        <p className="mt-4 max-w-2xl text-lg font-medium leading-relaxed text-emerald-400">
+          Generate a secure, typo-proof stablecoin payment link in 10 seconds. Our platform is completely open source, requiring no signups, no cookies, no subscriptions, zero data tracking, and zero transaction anxiety. Copy your link, send it to the payer, and collect your funds instantly.
         </p>
-        <p className="mt-5 max-w-2xl text-base leading-relaxed text-slate-400">
-          STBLSS is an independent software utility that removes human error and volatility risk from peer-to-peer digital dollar transactions. Built entirely on the client side with no accounts, no server databases, and no tracking cookies. Paste your address to instantly generate a typo-proof stablecoin checkout link. Our open code transparently routes payments directly through your own browser wallet—99% to the receiver, 1% terminal fee. Pure utility. Stable value. Zero middleman.
-        </p>
+        <a
+          href="/check"
+          className="mt-6 inline-flex items-center gap-1.5 rounded-full border border-emerald-400/40 bg-emerald-400/10 px-4 py-2 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-400/20"
+        >
+          About to send? Run a pre-flight check on the address first →
+        </a>
 
         <div className="mt-12 space-y-5 rounded-3xl border border-slate-800 bg-slate-900/40 p-6 md:p-8">
-          <InvoiceField label="Recipient Wallet Address" tooltip="This is the 0x Ethereum or Base network public address where you want to receive your funds. Copy this directly from your Coinbase Wallet or MetaMask extension.">
-            <input
-              className={`${fieldClass} ${addr && !addrValid ? "border-rose-500/70 focus:border-rose-500 focus:ring-rose-500/20" : ""}`}
-              placeholder="0x..."
-              value={form.to}
-              onChange={set("to")}
-            />
-            {addr && !addrValid && (
-              <p className="mt-2 text-xs font-medium text-rose-400">
-                That doesn't look like a valid EVM wallet address — it should be 42 characters starting with 0x.
-              </p>
-            )}
+          <InvoiceField label="Recipient Wallet Address" tooltip="This is the 0x Ethereum or Base network public address where you want to receive your funds. The safest way to enter it is by scanning your wallet's Receive QR code. You can also paste it from your clipboard.">
+            <RecipientAddressInput value={form.to} onChange={(v) => setForm({ ...form, to: v })} />
           </InvoiceField>
 
           <div className="grid gap-5 md:grid-cols-2">
@@ -697,6 +883,27 @@ export default function Generator() {
               onChange={set("amt")}
             />
           </InvoiceField>
+
+          <div className="grid gap-5 md:grid-cols-2">
+            <InvoiceField label="What's it for? (memo)" tooltip="An optional note shown on the checkout page — e.g. 'Invoice #4 — October retainer'. Helps your client know exactly what they're paying.">
+              <input
+                type="text"
+                className={fieldClass}
+                placeholder="Invoice #4 — October retainer"
+                value={form.memo}
+                onChange={set("memo")}
+              />
+            </InvoiceField>
+
+            <InvoiceField label="Due date (optional)" tooltip="When you'd like to be paid by. Shown on the checkout page as the invoice due date. STBLSS won't auto-remind — follow up by re-sending the link.">
+              <input
+                type="date"
+                className={fieldClass}
+                value={form.due}
+                onChange={set("due")}
+              />
+            </InvoiceField>
+          </div>
 
           <button
             onClick={generate}
@@ -732,8 +939,9 @@ export default function Generator() {
 ```jsx
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
-import { NETWORKS, formatAmount, splitAmount, PLATFORM_FEE_WALLET } from "@/lib/stblss";
+import { NETWORKS, formatAmount, splitAmount, toUnits } from "@/lib/stblss";
 import CopyButton from "@/components/CopyButton";
+import InvoiceStatus from "@/components/InvoiceStatus";
 import PayButton from "@/components/PayButton";
 import PaidConfirmation from "@/components/PaidConfirmation";
 import Footer from "@/components/Footer";
@@ -744,11 +952,15 @@ export default function Checkout() {
   const netKey = params.get("net") || "base";
   const token = params.get("token") || "USDC";
   const amt = params.get("amt") || "0";
+  const memo = params.get("memo") || "";
+  const due = params.get("due") || "";
   const [paid, setPaid] = useState(false);
 
   const net = NETWORKS[netKey];
   const { fee, payout } = splitAmount(amt);
   const invalid = !to || !(Number(amt) > 0) || !net;
+  const tokenInfo = net?.tokens?.[token];
+  const payoutUnits = tokenInfo ? toUnits(payout, tokenInfo.decimals) : 0n;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -772,6 +984,22 @@ export default function Checkout() {
         ) : (
           <>
             <div className="mt-12 rounded-3xl border border-slate-800 bg-slate-900/40 p-8 md:p-10">
+              {tokenInfo && (
+                <InvoiceStatus
+                  netKey={netKey}
+                  tokenAddress={tokenInfo.address}
+                  recipient={to}
+                  expectedPayoutUnits={payoutUnits}
+                />
+              )}
+              {memo && (
+                <p className="mb-2 text-sm font-semibold text-slate-300">{memo}</p>
+              )}
+              {due && (
+                <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-300">
+                  Due {new Date(due + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                </p>
+              )}
               <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Total Due</p>
               <p className="mt-3 text-5xl font-black tracking-tight text-white md:text-6xl">
                 {formatAmount(amt)} <span className="text-emerald-400">{token}</span>
@@ -786,6 +1014,17 @@ export default function Checkout() {
                   </span>
                 </div>
                 <CopyButton value={to} label="Copy Wallet Address" className="mt-2" />
+                <a
+                  href={`${net.blockExplorerUrls?.[0]}/address/${to}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-emerald-300 underline decoration-emerald-400/40 underline-offset-4 hover:text-emerald-200"
+                >
+                  Verify this address on the {net.label} explorer ↗
+                </a>
+                <p className="mt-2 text-xs leading-relaxed text-slate-500">
+                  This is the anxiety-killer: the exact address you're paying to, shown in plain text and verifiable on a block explorer in one tap. Confirm it matches what the recipient gave you — STBLSS is stateless, so this last look is yours.
+                </p>
               </div>
 
               <div className="mt-8 space-y-2 border-t border-slate-800 pt-6 text-sm text-slate-400">
@@ -797,22 +1036,123 @@ export default function Checkout() {
                   <span>Terminal fee (1%)</span>
                   <span className="font-mono text-slate-200">{formatAmount(fee)} {token}</span>
                 </div>
-                <div className="flex justify-between border-t border-slate-800/50 pt-2">
-                  <span className="text-slate-500">Fee wallet (on-chain verifiable)</span>
-                  <span className="break-all font-mono text-xs text-slate-500">{PLATFORM_FEE_WALLET}</span>
-                </div>
               </div>
 
               <div className="mt-8">
                 <PayButton to={to} netKey={netKey} token={token} amount={amt} onPaid={() => setPaid(true)} />
                 <p className="mt-3 text-center text-[11px] leading-relaxed text-slate-500">
-                  Non-custodial: your wallet signs every transfer directly to the stablecoin contract. STBLSS never holds funds and only flips to "complete" after the network confirms each leg on-chain.
+                  Non-custodial: your wallet signs every transfer straight to the stablecoin contract — STBLSS never holds funds, so there's no custodial middleman to worry about. It only flips to "complete" after the network confirms each leg on-chain. Zero custody, zero anxiety.
                 </p>
               </div>
             </div>
             <Footer />
           </>
         )}
+      </div>
+    </div>
+  );
+}
+```
+
+=== FILE: src/pages/Check.jsx ===
+
+```jsx
+import React, { useState } from "react";
+import { Link } from "react-router-dom";
+import { NETWORKS, TOKENS } from "@/lib/stblss";
+import { preFlightCheck } from "@/lib/preFlight";
+import { fieldClass } from "@/components/InvoiceField";
+import CheckResult from "@/components/CheckResult";
+import Footer from "@/components/Footer";
+
+const label = "text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500";
+
+export default function Check() {
+  const [addr, setAddr] = useState("");
+  const [net, setNet] = useState("base");
+  const [token, setToken] = useState("USDC");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+
+  const run = async () => {
+    setLoading(true);
+    setResult(null);
+    try {
+      const r = await preFlightCheck(net, token, addr);
+      setResult(r);
+    } catch (e) {
+      setResult({
+        status: "danger",
+        checks: [{ label: "Check failed", state: "danger", detail: e?.message || "Unknown error reaching the network." }],
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const safeLink =
+    result && result.status !== "danger" && addr.trim()
+      ? `${window.location.origin}/checkout?${new URLSearchParams({
+          to: addr.trim(),
+          net,
+          token,
+          amt: "0",
+        }).toString()}`
+      : "";
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      <div className="mx-auto max-w-2xl px-6 pt-16">
+        <Link to="/" className="text-sm font-black tracking-tight text-slate-500 hover:text-white">
+          STBLSS
+        </Link>
+        <h1 className="mt-8 text-4xl font-black tracking-tight text-white md:text-5xl">Pre-flight check</h1>
+        <p className="mt-3 max-w-xl text-base leading-relaxed text-slate-400">
+          Paste the address you're about to send to. STBLSS reads the chain in your browser and tells you if it looks like a
+          typo, the wrong network, the wrong token, or a fresh address — before you broadcast. No accounts, no backend, no
+          tracking.
+        </p>
+
+        <div className="mt-10 space-y-5 rounded-3xl border border-slate-800 bg-slate-900/40 p-6 md:p-8">
+          <div>
+            <span className={label}>Recipient address</span>
+            <input
+              className={`${fieldClass} mt-2 font-mono`}
+              placeholder="0x..."
+              value={addr}
+              onChange={(e) => setAddr(e.target.value)}
+            />
+          </div>
+          <div className="grid gap-5 md:grid-cols-2">
+            <div>
+              <span className={label}>Network</span>
+              <select className={`${fieldClass} mt-2`} value={net} onChange={(e) => setNet(e.target.value)}>
+                {Object.entries(NETWORKS).map(([k, v]) => (
+                  <option key={k} value={k}>{v.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <span className={label}>Token</span>
+              <select className={`${fieldClass} mt-2`} value={token} onChange={(e) => setToken(e.target.value)}>
+                {TOKENS.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <button
+            onClick={run}
+            disabled={!addr.trim() || loading}
+            className="w-full rounded-2xl bg-emerald-400 px-6 py-4 text-base font-bold text-slate-950 transition-all duration-300 hover:bg-emerald-300 disabled:opacity-40"
+          >
+            {loading ? "Reading the chain…" : "Run pre-flight check"}
+          </button>
+        </div>
+
+        {result && <CheckResult result={result} safeLink={safeLink} />}
+
+        <Footer />
       </div>
     </div>
   );
@@ -1041,6 +1381,43 @@ export default function PaidConfirmation() {
 }
 ```
 
+=== FILE: src/components/InvoiceStatus.jsx ===
+
+```jsx
+import React, { useState, useEffect } from "react";
+import { Loader2, CheckCircle2, Clock, AlertCircle } from "lucide-react";
+import { checkPaymentStatus } from "@/lib/stblss";
+
+const CONFIG = {
+  checking: { Icon: Loader2, text: "Verifying on-chain…", cls: "border-slate-700 bg-slate-800/40 text-slate-300", spin: true },
+  paid: { Icon: CheckCircle2, text: "Paid · verified on-chain", cls: "border-emerald-400/50 bg-emerald-400/10 text-emerald-300", spin: false },
+  unpaid: { Icon: Clock, text: "Not yet detected on-chain", cls: "border-slate-700 bg-slate-800/40 text-slate-400", spin: false },
+  unknown: { Icon: AlertCircle, text: "Couldn't verify on-chain right now", cls: "border-amber-500/40 bg-amber-500/10 text-amber-300", spin: false },
+};
+
+export default function InvoiceStatus({ netKey, tokenAddress, recipient, expectedPayoutUnits }) {
+  const [state, setState] = useState("checking");
+
+  useEffect(() => {
+    let active = true;
+    setState("checking");
+    checkPaymentStatus(netKey, tokenAddress, recipient, expectedPayoutUnits).then((r) => {
+      if (active) setState(r.status);
+    });
+    return () => { active = false; };
+  }, [netKey, tokenAddress, recipient, expectedPayoutUnits]);
+
+  const { Icon, text, cls, spin } = CONFIG[state] || CONFIG.unknown;
+
+  return (
+    <div className={`mb-4 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold ${cls}`}>
+      <Icon className={`h-3.5 w-3.5 ${spin ? "animate-spin" : ""}`} />
+      {text}
+    </div>
+  );
+}
+```
+
 === FILE: src/components/InvoiceField.jsx ===
 
 ```jsx
@@ -1138,6 +1515,124 @@ export default function CopyButton({ value, label = "Copy Link", className = "" 
 }
 ```
 
+=== FILE: src/components/RecipientAddressInput.jsx ===
+
+```jsx
+import React, { useState } from "react";
+import { ShieldCheck, AlertTriangle, ClipboardPaste, Wallet, X } from "lucide-react";
+import { isEvmAddress, isChecksumValid } from "@/lib/stblss";
+
+// Recipient address entry — paste-only (no QR, no manual-typing risk).
+// Users copy the address from their wallet app and paste it here. EIP-55
+// checksum still guards any pasted value against single-character typos.
+export default function RecipientAddressInput({ value, onChange }) {
+  const addr = (value || "").trim();
+  const addrValid = isEvmAddress(addr);
+  const checksumBad = addrValid && isChecksumValid(addr) === false;
+
+  const [connecting, setConnecting] = useState(false);
+
+  const pasteFromClipboard = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) onChange(text.trim());
+    } catch {
+      // Clipboard read blocked — paste manually into the field below.
+    }
+  };
+
+  // Pull the active account straight from the browser wallet extension.
+  // Prevents human setup typos by never typing the address at all.
+  const connectAndAutofill = async () => {
+    const eth = window.ethereum;
+    if (!eth) return;
+    setConnecting(true);
+    try {
+      const accounts = await eth.request({ method: "eth_requestAccounts" });
+      if (accounts?.[0]) onChange(accounts[0]);
+    } catch {
+      // user rejected the connection prompt — leave the field as-is
+    } finally {
+      setConnecting(false);
+    }
+  };
+
+  const clear = () => onChange("");
+
+  const border = !addr
+    ? "border-slate-700 focus:border-emerald-400 focus:ring-emerald-400/20"
+    : checksumBad
+    ? "border-amber-500/70 focus:border-amber-500 focus:ring-amber-500/20"
+    : addrValid
+    ? "border-emerald-500/50 focus:border-emerald-500 focus:ring-emerald-500/20"
+    : "border-rose-500/70 focus:border-rose-500 focus:ring-rose-500/20";
+
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
+      <p className="text-xs leading-relaxed text-slate-400">
+        In your wallet, tap <span className="font-semibold text-slate-300">Receive</span>, then{" "}
+        <span className="font-semibold text-slate-300">Copy</span> your address and paste it below.
+      </p>
+
+      <div className="mt-3 flex gap-2">
+        <input
+          placeholder="Paste your 0x wallet address"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className={`flex-1 rounded-xl border bg-slate-900/60 px-4 py-3 font-mono text-sm text-slate-100 outline-none transition focus:ring-2 ${border}`}
+        />
+        {addr && (
+          <button
+            type="button"
+            onClick={clear}
+            aria-label="Clear address"
+            className="inline-flex items-center justify-center rounded-xl border border-slate-700 bg-slate-800/60 px-3 text-slate-300 transition hover:border-slate-500 hover:bg-slate-800"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={connectAndAutofill}
+          className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-400/50 bg-emerald-400/10 px-4 py-2.5 text-sm font-bold text-emerald-300 transition hover:bg-emerald-400/20 disabled:opacity-60"
+        >
+          <Wallet className="h-4 w-4" /> {connecting ? "Connecting…" : "Connect & Autofill"}
+        </button>
+        <button
+          type="button"
+          onClick={pasteFromClipboard}
+          className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800/60 px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:border-slate-500 hover:bg-slate-800"
+        >
+          <ClipboardPaste className="h-4 w-4" /> Paste from clipboard
+        </button>
+      </div>
+
+      {addr && !addrValid && (
+        <p className="mt-3 flex items-center gap-2 text-xs font-medium text-rose-300">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          That isn't a valid EVM address — it should be 42 characters starting with 0x.
+        </p>
+      )}
+      {addr && addrValid && checksumBad && (
+        <p className="mt-3 flex items-center gap-2 text-xs font-medium text-amber-300">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          EIP-55 checksum mismatch — a character may be wrong. Re-copy the address from your wallet.
+        </p>
+      )}
+      {addr && addrValid && !checksumBad && (
+        <p className="mt-3 flex items-center gap-2 text-xs font-medium text-emerald-300">
+          <ShieldCheck className="h-4 w-4 shrink-0" />
+          Address verified.
+        </p>
+      )}
+    </div>
+  );
+}
+```
+
 === FILE: src/components/HowItWorks.jsx ===
 
 ```jsx
@@ -1146,18 +1641,18 @@ import React from "react";
 const STEPS = [
   {
     n: "01",
-    title: "Input Details",
-    body: "Paste your 0x payout address, pick your Layer-2 network, and enter the dollar amount due.",
+    title: "Input & Verify",
+    body: "Connect your wallet or paste your 0x address. STBLSS runs EIP-55 checksum validation to block typos before the link even exists — so the 'did I mistype it?' fear never starts. Pick your network, enter the amount due.",
   },
   {
     n: "02",
     title: "Share Your Link",
-    body: "Click generate. STBLSS compiles your transaction into an anonymous, stateless link. Copy and send it.",
+    body: "Click generate. STBLSS compiles your payment into an anonymous, stateless link — no account, no backend, no trail to worry about. Copy and send it.",
   },
   {
     n: "03",
-    title: "Collect Instantly",
-    body: "Your payer opens the link and clicks Pay Now. 99% routes to you, 1% terminal fee.",
+    title: "Collect Anxiety-Free",
+    body: "Your payer opens the link, sees the recipient address in plain text, verifies it on a block explorer in one tap, then pays from their own wallet. 99% to you, 1% fee, zero custody, zero panic.",
   },
 ];
 
@@ -1173,6 +1668,63 @@ export default function HowItWorks() {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+```
+
+=== FILE: src/components/CheckResult.jsx ===
+
+```jsx
+import React from "react";
+import { ShieldCheck, ShieldAlert, ShieldX, Info } from "lucide-react";
+import CopyButton from "@/components/CopyButton";
+
+const ICON = { ok: ShieldCheck, warn: ShieldAlert, danger: ShieldX, info: Info };
+const COLOR = {
+  ok: "text-emerald-300 border-emerald-400/40 bg-emerald-400/10",
+  warn: "text-amber-300 border-amber-400/40 bg-amber-400/10",
+  danger: "text-red-300 border-red-400/40 bg-red-400/10",
+  info: "text-slate-300 border-slate-700 bg-slate-800/40",
+};
+const HEAD = {
+  ok: "Looks safe to send",
+  warn: "Hold up — review the warnings",
+  danger: "Do not send to this address",
+};
+
+export default function CheckResult({ result, safeLink }) {
+  const HeadIcon = ICON[result.status] || Info;
+  return (
+    <div className="mt-8 rounded-3xl border border-slate-800 bg-slate-900/40 p-6 md:p-8">
+      <div className={`flex items-center gap-3 rounded-2xl border px-4 py-3 ${COLOR[result.status]}`}>
+        <HeadIcon className="h-5 w-5 shrink-0" />
+        <span className="text-base font-bold">{HEAD[result.status]}</span>
+      </div>
+
+      <ul className="mt-5 space-y-3">
+        {result.checks.map((c, i) => {
+          const I = ICON[c.state] || Info;
+          return (
+            <li key={i} className="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+              <div className="flex items-center gap-2">
+                <I className={`h-4 w-4 shrink-0 ${COLOR[c.state].split(" ")[0]}`} />
+                <span className="text-sm font-semibold text-slate-200">{c.label}</span>
+              </div>
+              <p className="mt-1 text-sm leading-relaxed text-slate-400">{c.detail}</p>
+            </li>
+          );
+        })}
+      </ul>
+
+      {result.status !== "danger" && safeLink && (
+        <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-slate-800 bg-slate-950/60 p-4 sm:flex-row sm:items-center">
+          <a href={safeLink} className="flex-1 break-all font-mono text-xs text-emerald-300 hover:underline">
+            Build a safe checkout link from this address →
+          </a>
+          <CopyButton value={safeLink} label="Copy link" />
+        </div>
+      )}
     </div>
   );
 }
@@ -1214,7 +1766,8 @@ export default function Footer() {
 ## Notes
 
 - This standalone version removes all Base44 platform dependencies (`@base44/sdk`, `@base44/vite-plugin`, AuthContext, etc.) since STBLSS doesn't use them for anything functional.
-- The `App.jsx` is simplified to just a router with two public routes — no auth, no query client, no toaster (none are used by STBLSS).
-- The `package.json` includes only the 5 runtime dependencies STBLSS actually needs: `react`, `react-dom`, `react-router-dom`, `framer-motion`, `lucide-react`.
+- The `App.jsx` is a plain router with three public routes (`/`, `/checkout`, `/check`) — no auth, no query client, no toaster (none are used by STBLSS).
+- The `package.json` includes the 6 runtime dependencies STBLSS actually needs: `react`, `react-dom`, `react-router-dom`, `framer-motion`, `lucide-react`, and `js-sha3` (used by the EIP-55 checksum).
 - The fee wallet address is hardcoded in `src/lib/stblss.js` and displayed on the checkout page for transparency.
+- `/check` runs a fully stateless, in-browser pre-flight: format, EIP-55 checksum, on-chain history, token balance, contract-vs-wallet, and cross-chain activity — all via public RPCs, no backend.
 - Update the GitHub URL in `src/components/Footer.jsx` if your repo URL changes.
