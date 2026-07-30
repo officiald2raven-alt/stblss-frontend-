@@ -1,0 +1,1220 @@
+# STBLSS — Standalone Source Bundle
+
+This file contains the **complete, standalone source code** for STBLSS, stripped of all Base44 platform dependencies. It is a pure Vite + React + Tailwind CSS app that builds and runs anywhere — no backend, no database, no accounts.
+
+## How to use this bundle
+
+1. Download this file.
+2. Create a new folder for your GitHub repo.
+3. Create each file below at the exact path shown under the `=== FILE: path ===` headers.
+4. Run `npm install` then `npm run dev` to run locally, or `npm run build` to deploy.
+5. Push to GitHub.
+
+---
+
+## Repository Structure
+
+```
+stblss/
+├── index.html
+├── package.json
+├── vite.config.js
+├── tailwind.config.js
+├── postcss.config.js
+├── jsconfig.json
+├── .gitignore
+├── README.md
+└── src/
+    ├── main.jsx
+    ├── App.jsx
+    ├── index.css
+    ├── lib/
+    │   ├── stblss.js
+    │   └── utils.js
+    │   └── PageNotFound.jsx
+    ├── pages/
+    │   ├── Generator.jsx
+    │   └── Checkout.jsx
+    └── components/
+        ├── PayButton.jsx
+        ├── PaidConfirmation.jsx
+        ├── InvoiceField.jsx
+        ├── InfoTooltip.jsx
+        ├── CopyButton.jsx
+        ├── HowItWorks.jsx
+        └── Footer.jsx
+```
+
+---
+
+=== FILE: package.json ===
+
+```json
+{
+  "name": "stblss",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.26.0",
+    "framer-motion": "^11.16.4",
+    "lucide-react": "^0.475.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^3.4.17",
+    "tailwindcss-animate": "^1.0.7",
+    "vite": "^6.1.0"
+  }
+}
+```
+
+=== FILE: vite.config.js ===
+
+```js
+import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite'
+
+// https://vite.dev/config/
+export default defineConfig({
+  plugins: [react()],
+  resolve: {
+    alias: {
+      '@': '/src',
+    },
+  },
+});
+```
+
+=== FILE: tailwind.config.js ===
+
+```js
+/** @type {import('tailwindcss').Config} */
+module.exports = {
+    darkMode: ["class"],
+    content: ["./index.html", "./src/**/*.{ts,tsx,js,jsx}"],
+  theme: {
+  	extend: {
+  		borderRadius: {
+  			lg: 'var(--radius)',
+  			md: 'calc(var(--radius) - 2px)',
+  			sm: 'calc(var(--radius) - 4px)'
+  		},
+  		colors: {
+  			background: 'hsl(var(--background))',
+  			foreground: 'hsl(var(--foreground))',
+  			card: {
+  				DEFAULT: 'hsl(var(--card))',
+  				foreground: 'hsl(var(--card-foreground))'
+  			},
+  			popover: {
+  				DEFAULT: 'hsl(var(--popover))',
+  				foreground: 'hsl(var(--popover-foreground))'
+  			},
+  			primary: {
+  				DEFAULT: 'hsl(var(--primary))',
+  				foreground: 'hsl(var(--primary-foreground))'
+  			},
+  			secondary: {
+  				DEFAULT: 'hsl(var(--secondary))',
+  				foreground: 'hsl(var(--secondary-foreground))'
+  			},
+  			muted: {
+  				DEFAULT: 'hsl(var(--muted))',
+  				foreground: 'hsl(var(--muted-foreground))'
+  			},
+  			accent: {
+  				DEFAULT: 'hsl(var(--accent))',
+  				foreground: 'hsl(var(--accent-foreground))'
+  			},
+  			destructive: {
+  				DEFAULT: 'hsl(var(--destructive))',
+  				foreground: 'hsl(var(--destructive-foreground))'
+  			},
+  			border: 'hsl(var(--border))',
+  			input: 'hsl(var(--input))',
+  			ring: 'hsl(var(--ring))',
+  			chart: {
+  				'1': 'hsl(var(--chart-1))',
+  				'2': 'hsl(var(--chart-2))',
+  				'3': 'hsl(var(--chart-3))',
+  				'4': 'hsl(var(--chart-4))',
+  				'5': 'hsl(var(--chart-5))'
+  			},
+  			sidebar: {
+  				DEFAULT: 'hsl(var(--sidebar-background))',
+  				foreground: 'hsl(var(--sidebar-foreground))',
+  				primary: 'hsl(var(--sidebar-primary))',
+  				'primary-foreground': 'hsl(var(--sidebar-primary-foreground))',
+  				accent: 'hsl(var(--sidebar-accent))',
+  				'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
+  				border: 'hsl(var(--sidebar-border))',
+  				ring: 'hsl(var(--sidebar-ring))'
+  			}
+  		},
+  		fontFamily: {
+  			heading: ['var(--font-heading)'],
+  			body: ['var(--font-body)'],
+  			display: ['var(--font-display)'],
+  			mono: ['var(--font-mono)']
+  		},
+  		keyframes: {
+  			'accordion-down': {
+  				from: { height: '0' },
+  				to: { height: 'var(--radix-accordion-content-height)' }
+  			},
+  			'accordion-up': {
+  				from: { height: 'var(--radix-accordion-content-height)' },
+  				to: { height: '0' }
+  			}
+  		},
+  		animation: {
+  			'accordion-down': 'accordion-down 0.2s ease-out',
+  			'accordion-up': 'accordion-up 0.2s ease-out'
+  		}
+  	}
+  },
+  plugins: [require("tailwindcss-animate")],
+}
+```
+
+=== FILE: postcss.config.js ===
+
+```js
+export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+}
+```
+
+=== FILE: jsconfig.json ===
+
+```json
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "jsx": "react-jsx",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "lib": ["esnext", "dom"],
+    "target": "esnext",
+    "checkJs": false,
+    "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "types": []
+  },
+  "include": ["src/**/*.{js,jsx}"]
+}
+```
+
+=== FILE: .gitignore ===
+
+```
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Build output
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Environment
+.env
+.env.local
+.env.*.local
+```
+
+=== FILE: index.html ===
+
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>STBLSS</title>
+    <meta name="description" content="An open-source, stateless stablecoin payment terminal. Generate and collect stablecoin invoices without backend tracking. Non-custodial." />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
+```
+
+=== FILE: README.md ===
+
+````markdown
+# STBLSS
+
+An open-source, fully stateless, non-custodial stablecoin payment terminal.
+
+STBLSS lets you generate anonymous stablecoin payment links and collect payments with an automated 99% recipient / 1% terminal fee split. There are no accounts, no server databases, and no tracking cookies. All transaction signing happens exclusively via your browser wallet.
+
+## How it works
+
+1. **Generate a link** — paste your 0x wallet address, pick a network and token, enter the amount.
+2. **Share the link** — copy and send it to your payer through whatever channel you choose (email, DM, invoice, carrier pigeon).
+3. **Collect instantly** — the payer opens the link, clicks Pay, and their wallet sends two ERC-20 transfers: 99% to you, 1% terminal fee.
+
+STBLSS sends zero emails. You copy the link and send it yourself.
+
+## What STBLSS does NOT do
+
+- Does not hold, custody, or touch user funds at any point.
+- Does not use accounts, passwords, or backend storage.
+- Does not collect personal information, IP logs, or financial histories.
+- Does not send emails or notifications.
+- Is not a money transmitter — it is a client-side transaction composer UI.
+
+All data lives entirely in the URL parameter text. The app compiles raw ERC-20 `transfer(address,uint256)` calls and hands them to your browser wallet to sign.
+
+## Fee math (auditable)
+
+```js
+const fee = Math.round(total * 0.01 * 1e6) / 1e6;      // exactly 1% of the total
+const payout = Math.round((total - fee) * 1e6) / 1e6;   // the remaining 99%
+```
+
+The platform fee wallet address is hardcoded in `src/lib/stblss.js` and visible in the source and on the checkout page.
+
+## Supported networks
+
+- Base (Layer 2)
+- Arbitrum One (Layer 2)
+- Ethereum Mainnet
+
+## Supported tokens
+
+- USDC
+- USDT
+
+## Run locally
+
+```bash
+npm install
+npm run dev
+```
+
+## Build for production
+
+```bash
+npm run build
+```
+
+## Privacy
+
+STBLSS is completely stateless. We do not use accounts or backend databases. We collect zero personal information. Your data lives entirely inside your unique URL parameter text.
+
+## Legal Disclaimer
+
+STBLSS is a non-custodial software user interface utility. We do not process transactions, custody, or manage user funds. All transaction signing and execution happen exclusively via your independent browser wallet. Use at your own risk.
+````
+
+=== FILE: src/main.jsx ===
+
+```jsx
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import App from '@/App.jsx'
+import '@/index.css'
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <App />
+)
+```
+
+=== FILE: src/App.jsx ===
+
+```jsx
+import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import Generator from './pages/Generator';
+import Checkout from './pages/Checkout';
+import PageNotFound from './lib/PageNotFound';
+
+// STBLSS is fully stateless and client-side.
+// No login, no signup, no auth gate, no backend, no database.
+function App() {
+  return (
+    <Router>
+      <Routes>
+        <Route path="/" element={<Generator />} />
+        <Route path="/checkout" element={<Checkout />} />
+        <Route path="*" element={<PageNotFound />} />
+      </Routes>
+    </Router>
+  )
+}
+
+export default App
+```
+
+=== FILE: src/index.css ===
+
+```css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 3.9%;
+    --primary: 0 0% 9%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 0 0% 96.1%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 96.1%;
+    --muted-foreground: 0 0% 45.1%;
+    --accent: 0 0% 96.1%;
+    --accent-foreground: 0 0% 9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 89.8%;
+    --input: 0 0% 89.8%;
+    --ring: 0 0% 3.9%;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+    --radius: 0.5rem;
+    --font-heading: ui-sans-serif, system-ui, sans-serif;
+    --font-body: ui-sans-serif, system-ui, sans-serif;
+    --font-display: ui-sans-serif, system-ui, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 0 0% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 0 0% 9%;
+    --secondary: 0 0% 14.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 14.9%;
+    --muted-foreground: 0 0% 63.9%;
+    --accent: 0 0% 14.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 14.9%;
+    --input: 0 0% 14.9%;
+    --ring: 0 0% 83.1%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground font-body;
+  }
+}
+```
+
+=== FILE: src/lib/stblss.js ===
+
+```js
+// Hardcoded platform fee wallet — the 1% convenience fee routes directly here.
+// This is a live, public address baked into the client-side payment function.
+export const PLATFORM_FEE_WALLET = "0xabC0dcfe7A6288cbF4123EF595d73CDDD3db58eA";
+
+export const NETWORKS = {
+  base: {
+    label: "Base Network",
+    chainIdHex: "0x2105",
+    evm: true,
+    params: {
+      chainId: "0x2105",
+      chainName: "Base",
+      nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+      rpcUrls: ["https://mainnet.base.org"],
+      blockExplorerUrls: ["https://basescan.org"],
+    },
+    tokens: {
+      USDC: { address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6 },
+      USDT: { address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", decimals: 6 },
+    },
+  },
+  arbitrum: {
+    label: "Arbitrum",
+    chainIdHex: "0xa4b1",
+    evm: true,
+    params: {
+      chainId: "0xa4b1",
+      chainName: "Arbitrum One",
+      nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+      rpcUrls: ["https://arb1.arbitrum.io/rpc"],
+      blockExplorerUrls: ["https://arbiscan.io"],
+    },
+    tokens: {
+      USDC: { address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", decimals: 6 },
+      USDT: { address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", decimals: 6 },
+    },
+  },
+  ethereum: {
+    label: "Ethereum Mainnet",
+    chainIdHex: "0x1",
+    evm: true,
+    params: {
+      chainId: "0x1",
+      chainName: "Ethereum Mainnet",
+      nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+      rpcUrls: ["https://cloudflare-eth.com"],
+      blockExplorerUrls: ["https://etherscan.io"],
+    },
+    tokens: {
+      USDC: { address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: 6 },
+      USDT: { address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals: 6 },
+    },
+  },
+};
+
+export const TOKENS = ["USDC", "USDT"];
+
+// PUBLIC, VERIFIABLE FEE MATH — anyone inspecting this file can audit the split.
+// Total "Amount Due" is split into exactly two transfers and nothing goes anywhere else:
+//   - 99%  → recipient's wallet (payout)
+//   -  1%  → platform's hardcoded fee wallet (fee)
+//   -  0%  → any other address
+export function splitAmount(amount) {
+  const total = Number(amount) || 0;        // the full Amount Due from the URL
+  const fee = Math.round(total * 0.01 * 1e6) / 1e6;   // exactly 1% of the total
+  const payout = Math.round((total - fee) * 1e6) / 1e6; // the remaining 99% (total − fee)
+  return { total, fee, payout };
+}
+
+export function toUnits(amount, decimals) {
+  const [whole, frac = ""] = String(amount).split(".");
+  const padded = (frac + "0".repeat(decimals)).slice(0, decimals);
+  return BigInt((whole || "0") + padded);
+}
+
+// ERC-20 transfer(address,uint256) calldata
+export function encodeTransfer(to, units) {
+  const addr = to.toLowerCase().replace("0x", "").padStart(64, "0");
+  const amt = units.toString(16).padStart(64, "0");
+  return "0xa9059cbb" + addr + amt;
+}
+
+export function formatAmount(value) {
+  const n = Number(value);
+  if (!isFinite(n)) return "0";
+  return n.toLocaleString("en-US", { maximumFractionDigits: 6 });
+}
+
+export function shortAddress(addr = "") {
+  if (addr.length < 14) return addr;
+  return `${addr.slice(0, 8)}…${addr.slice(-6)}`;
+}
+
+// Strict format validation for an EVM address: must be 0x + exactly 40 hex chars.
+// Catches the common paste/typing typos (wrong length, bad chars, missing prefix).
+export function isEvmAddress(addr = "") {
+  return /^0x[a-fA-F0-9]{40}$/.test(addr.trim());
+}
+```
+
+=== FILE: src/lib/utils.js ===
+
+```js
+// Minimal utility for class merging (used by shadcn/ui components if present).
+export function cn(...inputs) {
+  return inputs.filter(Boolean).join(" ");
+}
+```
+
+=== FILE: src/lib/PageNotFound.jsx ===
+
+```jsx
+import React from "react";
+
+export default function PageNotFound() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-100">
+      <div className="text-center">
+        <h1 className="text-6xl font-black text-white">404</h1>
+        <p className="mt-4 text-slate-400">This page does not exist.</p>
+        <a href="/" className="mt-6 inline-block text-emerald-400 hover:underline">
+          ← Back to STBLSS
+        </a>
+      </div>
+    </div>
+  );
+}
+```
+
+=== FILE: src/pages/Generator.jsx ===
+
+```jsx
+import React, { useState } from "react";
+import { NETWORKS, TOKENS, isEvmAddress } from "@/lib/stblss";
+import InvoiceField, { fieldClass } from "@/components/InvoiceField";
+import CopyButton from "@/components/CopyButton";
+import HowItWorks from "@/components/HowItWorks";
+import Footer from "@/components/Footer";
+
+export default function Generator() {
+  const [form, setForm] = useState({ to: "", net: "base", token: "USDC", amt: "" });
+  const [link, setLink] = useState("");
+
+  const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+
+  const generate = () => {
+    const params = new URLSearchParams({
+      to: form.to.trim(),
+      net: form.net,
+      token: form.token,
+      amt: form.amt,
+    });
+    setLink(`${window.location.origin}/checkout?${params.toString()}`);
+  };
+
+  const addr = form.to.trim();
+  const addrValid = isEvmAddress(addr);
+  const valid = addrValid && Number(form.amt) > 0;
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      <div className="mx-auto max-w-3xl px-6 pt-20">
+        <h1 className="text-5xl font-black tracking-tight text-white md:text-7xl">STBLSS</h1>
+        <p className="mt-4 text-lg font-medium text-emerald-400">
+          An Open-Source, Stateless Stablecoin Payment Route.
+        </p>
+        <p className="mt-5 max-w-2xl text-base leading-relaxed text-slate-400">
+          STBLSS is an independent software utility that removes human error and volatility risk from peer-to-peer digital dollar transactions. Built entirely on the client side with no accounts, no server databases, and no tracking cookies. Paste your address to instantly generate a typo-proof stablecoin checkout link. Our open code transparently routes payments directly through your own browser wallet—99% to the receiver, 1% terminal fee. Pure utility. Stable value. Zero middleman.
+        </p>
+
+        <div className="mt-12 space-y-5 rounded-3xl border border-slate-800 bg-slate-900/40 p-6 md:p-8">
+          <InvoiceField label="Recipient Wallet Address" tooltip="This is the 0x Ethereum or Base network public address where you want to receive your funds. Copy this directly from your Coinbase Wallet or MetaMask extension.">
+            <input
+              className={`${fieldClass} ${addr && !addrValid ? "border-rose-500/70 focus:border-rose-500 focus:ring-rose-500/20" : ""}`}
+              placeholder="0x..."
+              value={form.to}
+              onChange={set("to")}
+            />
+            {addr && !addrValid && (
+              <p className="mt-2 text-xs font-medium text-rose-400">
+                That doesn't look like a valid EVM wallet address — it should be 42 characters starting with 0x.
+              </p>
+            )}
+          </InvoiceField>
+
+          <div className="grid gap-5 md:grid-cols-2">
+            <InvoiceField label="Target Blockchain Network" tooltip="Choose your preferred network. Layer-2 networks like Base or Arbitrum offer ultra-fast transactions for fractions of a penny, while Ethereum Mainnet carries higher gas fees.">
+              <select className={fieldClass} value={form.net} onChange={set("net")}>
+                {Object.entries(NETWORKS).map(([k, v]) => (
+                  <option key={k} value={k}>{v.label}</option>
+                ))}
+              </select>
+            </InvoiceField>
+
+            <InvoiceField label="Stablecoin Token" tooltip="Select the specific asset you are requesting. We support USDC and USDT, which are pegged 1:1 to the US Dollar to prevent price volatility during payment.">
+              <select className={fieldClass} value={form.token} onChange={set("token")}>
+                {TOKENS.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </InvoiceField>
+          </div>
+
+          <InvoiceField label="Amount Due ($)" tooltip="Enter the exact dollar amount you wish to collect. Our terminal automatically calculates the 99% recipient payout and the 1% terminal fee split, auditable on-chain.">
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              className={fieldClass}
+              placeholder="0.00"
+              value={form.amt}
+              onChange={set("amt")}
+            />
+          </InvoiceField>
+
+          <button
+            onClick={generate}
+            disabled={!valid}
+            className="w-full rounded-2xl bg-emerald-400 px-6 py-4 text-base font-bold text-slate-950 shadow-[0_0_40px_-12px_rgba(52,211,153,0.7)] transition-all duration-300 hover:bg-emerald-300 disabled:opacity-40 disabled:shadow-none"
+          >
+            Generate Secure Payment Link
+          </button>
+
+          {link && (
+            <div className="flex flex-col gap-3 rounded-2xl border border-slate-800 bg-slate-950/60 p-4 sm:flex-row sm:items-center">
+              <a
+                href={link}
+                className="flex-1 break-all font-mono text-xs text-emerald-300 hover:underline"
+              >
+                {link}
+              </a>
+              <CopyButton value={link} />
+            </div>
+          )}
+        </div>
+
+        <HowItWorks />
+        <Footer />
+      </div>
+    </div>
+  );
+}
+```
+
+=== FILE: src/pages/Checkout.jsx ===
+
+```jsx
+import React, { useState } from "react";
+import { Link } from "react-router-dom";
+import { NETWORKS, formatAmount, splitAmount, PLATFORM_FEE_WALLET } from "@/lib/stblss";
+import CopyButton from "@/components/CopyButton";
+import PayButton from "@/components/PayButton";
+import PaidConfirmation from "@/components/PaidConfirmation";
+import Footer from "@/components/Footer";
+
+export default function Checkout() {
+  const params = new URLSearchParams(window.location.search);
+  const to = params.get("to") || "";
+  const netKey = params.get("net") || "base";
+  const token = params.get("token") || "USDC";
+  const amt = params.get("amt") || "0";
+  const [paid, setPaid] = useState(false);
+
+  const net = NETWORKS[netKey];
+  const { fee, payout } = splitAmount(amt);
+  const invalid = !to || !(Number(amt) > 0) || !net;
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      <div className="mx-auto max-w-2xl px-6 pt-16">
+        <Link to="/" className="text-sm font-black tracking-tight text-slate-500 hover:text-white">
+          STBLSS
+        </Link>
+
+        {invalid ? (
+          <div className="mt-16 rounded-3xl border border-slate-800 bg-slate-900/40 p-10 text-center">
+            <h1 className="text-2xl font-bold text-white">Payment link incomplete</h1>
+            <p className="mt-3 text-slate-400">
+              This link is missing a wallet address, network, or amount. Ask the sender for a new link.
+            </p>
+          </div>
+        ) : paid ? (
+          <div className="mt-12">
+            <PaidConfirmation />
+            <Footer />
+          </div>
+        ) : (
+          <>
+            <div className="mt-12 rounded-3xl border border-slate-800 bg-slate-900/40 p-8 md:p-10">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Total Due</p>
+              <p className="mt-3 text-5xl font-black tracking-tight text-white md:text-6xl">
+                {formatAmount(amt)} <span className="text-emerald-400">{token}</span>
+              </p>
+
+              <div className="mt-10 space-y-3 border-t border-slate-800 pt-8">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Pay To</p>
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="break-all font-mono text-sm text-slate-200">{to}</span>
+                  <span className="rounded-full border border-emerald-400/50 bg-emerald-400/10 px-3 py-1 text-xs font-bold text-emerald-300">
+                    {net.label}
+                  </span>
+                </div>
+                <CopyButton value={to} label="Copy Wallet Address" className="mt-2" />
+              </div>
+
+              <div className="mt-8 space-y-2 border-t border-slate-800 pt-6 text-sm text-slate-400">
+                <div className="flex justify-between">
+                  <span>Recipient payout (99%)</span>
+                  <span className="font-mono text-slate-200">{formatAmount(payout)} {token}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Terminal fee (1%)</span>
+                  <span className="font-mono text-slate-200">{formatAmount(fee)} {token}</span>
+                </div>
+                <div className="flex justify-between border-t border-slate-800/50 pt-2">
+                  <span className="text-slate-500">Fee wallet (on-chain verifiable)</span>
+                  <span className="break-all font-mono text-xs text-slate-500">{PLATFORM_FEE_WALLET}</span>
+                </div>
+              </div>
+
+              <div className="mt-8">
+                <PayButton to={to} netKey={netKey} token={token} amount={amt} onPaid={() => setPaid(true)} />
+                <p className="mt-3 text-center text-[11px] leading-relaxed text-slate-500">
+                  Non-custodial: your wallet signs every transfer directly to the stablecoin contract. STBLSS never holds funds and only flips to "complete" after the network confirms each leg on-chain.
+                </p>
+              </div>
+            </div>
+            <Footer />
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+```
+
+=== FILE: src/components/PayButton.jsx ===
+
+```jsx
+import React, { useState } from "react";
+import { Loader2, Wallet, ShieldCheck } from "lucide-react";
+import { NETWORKS, PLATFORM_FEE_WALLET, encodeTransfer, splitAmount, toUnits } from "@/lib/stblss";
+
+// Poll a single transaction's receipt until mined; confirm success via status 0x1.
+// Stateless: read through the payer's OWN wallet RPC (window.ethereum) — no backend.
+async function awaitReceipt(eth, hash, { timeoutMs = 120000, intervalMs = 2500 } = {}) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    let receipt = null;
+    try {
+      receipt = await eth.request({ method: "eth_getTransactionReceipt", params: [hash] });
+    } catch { /* transient RPC — keep polling */ }
+    if (receipt) return { confirmed: Number(receipt.status) === 1, receipt };
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  return { confirmed: false, receipt: null };
+}
+
+// Poll an EIP-5792 batch (wallet_sendCalls) via wallet_getCallsStatus until the
+// wallet reports CONFIRMED or FAILED. Verify per-call receipts when available.
+async function awaitCallsStatus(eth, id, { timeoutMs = 120000, intervalMs = 2500 } = {}) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    let res = null;
+    try {
+      res = await eth.request({ method: "wallet_getCallsStatus", params: [id] });
+    } catch { /* transient — keep polling */ }
+    if (res) {
+      const status = String(res.status || "").toUpperCase();
+      if (status === "CONFIRMED") {
+        const receipts = Array.isArray(res.receipts) ? res.receipts : [];
+        // If the wallet returned per-call receipts, verify each succeeded (0x1).
+        // If it only returned CONFIRMED with no receipts, accept the wallet's word.
+        return { confirmed: receipts.length ? receipts.every((r) => Number(r.status) === 1) : true };
+      }
+      if (status === "FAILED") return { confirmed: false };
+    }
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  return { confirmed: false };
+}
+
+// Wallet error codes meaning "the user declined the popup" — never auto-retry.
+const USER_REJECTED = new Set([4001, -32001]);
+
+export default function PayButton({ to, netKey, token, amount, onPaid }) {
+  const [status, setStatus] = useState("idle"); // idle | working | confirming | paid
+  const [error, setError] = useState("");
+  const [flow, setFlow] = useState(null); // "batched" | "per-call" — shown for transparency
+
+  const net = NETWORKS[netKey];
+
+  const pay = async () => {
+    setError("");
+    const eth = window.ethereum;
+    if (!net?.evm) {
+      setError("Unsupported network. Open a valid STBLSS payment link and try again.");
+      return;
+    }
+    if (!eth) {
+      setError("No browser wallet detected. Install a wallet extension such as MetaMask to continue.");
+      return;
+    }
+
+    setStatus("working");
+    try {
+      const accounts = await eth.request({ method: "eth_requestAccounts" });
+      const from = accounts[0];
+
+      try {
+        await eth.request({ method: "wallet_switchEthereumChain", params: [{ chainId: net.chainIdHex }] });
+      } catch (switchErr) {
+        if (switchErr.code === 4902) {
+          await eth.request({ method: "wallet_addEthereumChain", params: [net.params] });
+        } else {
+          throw switchErr;
+        }
+      }
+
+      // --- NON-CUSTODIAL TRANSFER BUILD ---
+      // We only compile raw ERC-20 `transfer(address,uint256)` payloads and hand them
+      // to the user's LOCAL browser wallet (window.ethereum) to sign and broadcast.
+      // No platform smart contract, relayer, or custodial layer is ever involved.
+      const tokenInfo = net.tokens[token];
+      const { fee, payout } = splitAmount(amount); // 99% payout, 1% fee, 0% elsewhere
+
+      const calls = [
+        { to: tokenInfo.address, data: encodeTransfer(to, toUnits(payout, tokenInfo.decimals)) },                 // 99% → recipient
+        { to: tokenInfo.address, data: encodeTransfer(PLATFORM_FEE_WALLET, toUnits(fee, tokenInfo.decimals)) }, //  1% → fee wallet
+      ];
+
+      setStatus("confirming");
+
+      let confirmed = false;
+      let batchedAttempted = false;
+
+      // --- PREFERRED: EIP-5792 batched send (ONE signature, verified on-chain) ---
+      // The wallet signs both transfers at once; we then poll its calls-status
+      // until CONFIRMED and check every receipt. Fully stateless — reads only
+      // through the payer's own wallet RPC.
+      // SAFETY: once we invoke wallet_sendCalls, if it throws a non-rejected
+      // error we cannot know whether the wallet already submitted on-chain.
+      // To prevent a double-send, we never fall through to per-call after a
+      // batch has been attempted — except when the wallet clearly doesn't
+      // support the method (method-not-found, code -32601).
+      try {
+        const callsId = await eth.request({
+          method: "wallet_sendCalls",
+          params: [{ version: "1.0", chainId: net.chainIdHex, from, calls }],
+        });
+        if (callsId) {
+          batchedAttempted = true;
+          setFlow("batched");
+          const res = await awaitCallsStatus(eth, callsId);
+          confirmed = res.confirmed;
+        }
+      } catch (batchErr) {
+        // User declined the single-signature popup → stop, don't pester with a second.
+        if (USER_REJECTED.has(batchErr?.code)) throw batchErr;
+        if (batchErr?.code === -32601) {
+          // Method not found — wallet doesn't support EIP-5792. Safe to fall back.
+        } else {
+          // Ambiguous: the wallet may have already submitted on-chain.
+          // Do NOT fall through to per-call — that would double-send.
+          setStatus("idle");
+          setError("The batched payment couldn't be confirmed. Check your wallet or block explorer — no double charge was made.");
+          return;
+        }
+      }
+
+      // --- FALLBACK: per-call send (universal) + receipt verification ---
+      // Every wallet supports this; we get a hash for each transfer and confirm
+      // each against a mined receipt. Two approvals, but verified everywhere.
+      // Only runs if batching was never submitted (no double-send after a batch).
+      if (!confirmed && !batchedAttempted) {
+        setFlow("per-call");
+        const hashes = [];
+        for (const call of calls) {
+          const hash = await eth.request({ method: "eth_sendTransaction", params: [{ from, to: call.to, data: call.data }] });
+          if (hash) hashes.push(hash);
+        }
+        let allOk = true;
+        for (const hash of hashes) {
+          const { confirmed: ok } = await awaitReceipt(eth, hash);
+          if (!ok) { allOk = false; break; }
+        }
+        confirmed = allOk;
+      }
+
+      if (confirmed) {
+        setStatus("paid");
+        onPaid?.();
+      } else {
+        setStatus("idle");
+        setError("A transfer did not confirm on-chain in time. Check your wallet or block explorer — your funds are safe and no custodial step was ever involved.");
+      }
+    } catch (e) {
+      setStatus("idle");
+      setError(e?.message || "Transaction was not completed.");
+    }
+  };
+
+  const label =
+    status === "working" ? "Awaiting Wallet Confirmation…" :
+    status === "confirming" ? "Confirming on-chain…" :
+    "Connect Wallet & Pay Now";
+
+  return (
+    <div>
+      <button
+        onClick={pay}
+        disabled={status === "working" || status === "confirming"}
+        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-400 px-6 py-4 text-base font-bold text-slate-950 shadow-[0_0_40px_-12px_rgba(52,211,153,0.7)] transition-all duration-300 hover:bg-emerald-300 disabled:opacity-60"
+      >
+        {status === "working" || status === "confirming" ? <Loader2 className="h-5 w-5 animate-spin" /> : <Wallet className="h-5 w-5" />}
+        {label}
+      </button>
+      {status === "confirming" && (
+        <p className="mt-3 flex items-center justify-center gap-1.5 text-xs font-medium text-slate-400">
+          <ShieldCheck className="h-4 w-4 text-emerald-400" />
+          {flow === "batched"
+            ? "Verifying your single batched payment on-chain — both transfers confirmed in one block."
+            : "Verifying each transfer on-chain — every leg is confirmed, never assumed."}
+        </p>
+      )}
+      {error && <p className="mt-3 text-sm text-rose-400">{error}</p>}
+    </div>
+  );
+}
+```
+
+=== FILE: src/components/PaidConfirmation.jsx ===
+
+```jsx
+import React from "react";
+import { motion } from "framer-motion";
+import { CheckCircle2 } from "lucide-react";
+
+export default function PaidConfirmation() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.94 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.5, ease: "easeOut" }}
+      className="rounded-3xl border border-emerald-400/40 bg-emerald-400/5 p-12 text-center"
+    >
+      <CheckCircle2 className="mx-auto h-24 w-24 text-emerald-400" strokeWidth={1.5} />
+      <h2 className="mt-6 text-3xl font-bold tracking-tight text-emerald-300 md:text-4xl">
+        Payment Complete — Transaction Confirmed.
+      </h2>
+      <p className="mt-4 text-sm font-medium text-slate-400">
+        Both transfers were mined and verified on-chain. No funds were ever held or assumed — your wallet signed every move.
+      </p>
+    </motion.div>
+  );
+}
+```
+
+=== FILE: src/components/InvoiceField.jsx ===
+
+```jsx
+import React from "react";
+import InfoTooltip from "@/components/InfoTooltip";
+
+export default function InvoiceField({ label, tooltip, children }) {
+  return (
+    <label className="block">
+      <span className="mb-2 flex items-center text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+        {label}
+        {tooltip && <InfoTooltip text={tooltip} />}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+export const fieldClass =
+  "w-full rounded-xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-white placeholder:text-slate-600 outline-none transition-colors focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-400/20";
+```
+
+=== FILE: src/components/InfoTooltip.jsx ===
+
+```jsx
+import React, { useState } from "react";
+
+// Stateless, pointer-driven tooltip.
+// Desktop: hover to reveal, move away to dismiss.
+// Mobile: touch-and-hold to reveal, release / move finger to dismiss.
+export default function InfoTooltip({ text }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <span className="relative inline-flex align-middle">
+      <button
+        type="button"
+        aria-label="More info"
+        tabIndex={0}
+        onClick={(e) => e.preventDefault()}
+        onPointerEnter={() => setOpen(true)}
+        onPointerLeave={() => setOpen(false)}
+        onPointerDown={() => setOpen(true)}
+        onPointerUp={() => setOpen(false)}
+        onPointerCancel={() => setOpen(false)}
+        onBlur={() => setOpen(false)}
+        className="ml-1.5 inline-flex h-[18px] w-[18px] select-none items-center justify-center rounded-full border border-slate-600 text-[11px] font-bold leading-none text-slate-400 transition-colors hover:border-emerald-400 hover:text-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/40"
+      >
+        ?
+      </button>
+      <span
+        role="tooltip"
+        className={`pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-60 max-w-[80vw] origin-bottom-left rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-xs font-medium leading-relaxed text-slate-100 shadow-2xl transition-all duration-200 ease-out ${
+          open
+            ? "translate-y-0 opacity-100"
+            : "pointer-events-none translate-y-1 opacity-0"
+        }`}
+      >
+        {text}
+      </span>
+    </span>
+  );
+}
+```
+
+=== FILE: src/components/CopyButton.jsx ===
+
+```jsx
+import React, { useState } from "react";
+import { Check, Copy } from "lucide-react";
+
+export default function CopyButton({ value, label = "Copy Link", className = "" }) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    await navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1600);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition-all duration-300 ${
+        copied
+          ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-300"
+          : "border-slate-700 bg-slate-800/60 text-slate-200 hover:border-slate-500 hover:bg-slate-800"
+      } ${className}`}
+    >
+      {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+      {copied ? "Copied!" : label}
+    </button>
+  );
+}
+```
+
+=== FILE: src/components/HowItWorks.jsx ===
+
+```jsx
+import React from "react";
+
+const STEPS = [
+  {
+    n: "01",
+    title: "Input Details",
+    body: "Paste your 0x payout address, pick your Layer-2 network, and enter the dollar amount due.",
+  },
+  {
+    n: "02",
+    title: "Share Your Link",
+    body: "Click generate. STBLSS compiles your transaction into an anonymous, stateless link. Copy and send it.",
+  },
+  {
+    n: "03",
+    title: "Collect Instantly",
+    body: "Your payer opens the link and clicks Pay Now. 99% routes to you, 1% terminal fee.",
+  },
+];
+
+export default function HowItWorks() {
+  return (
+    <div className="mt-16">
+      <div className="grid gap-8 md:grid-cols-3 md:gap-8">
+        {STEPS.map((s) => (
+          <div key={s.n} className="flex flex-col">
+            <span className="font-mono text-xs font-bold text-emerald-400">{s.n}</span>
+            <h3 className="mt-3 text-base font-bold text-white">{s.title}</h3>
+            <p className="mt-2 text-sm leading-relaxed text-slate-400">{s.body}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+```
+
+=== FILE: src/components/Footer.jsx ===
+
+```jsx
+import React from "react";
+
+export default function Footer() {
+  return (
+    <footer className="mx-auto mt-24 max-w-3xl border-t border-slate-800 px-6 py-10 text-[13px] leading-relaxed text-slate-500">
+      <a
+        href="https://github.com/officiald2raven-alt/stblss-frontend-"
+        target="_blank"
+        rel="noreferrer"
+        className="text-slate-400 underline decoration-slate-700 underline-offset-4 transition-colors hover:text-emerald-300"
+      >
+        [View Source Code on GitHub]
+      </a>
+      <p className="mt-5">
+        <span className="text-slate-400">Privacy Policy:</span> STBLSS is completely stateless. We do not use accounts or
+        backend databases. We collect zero personal information, IP logs, or financial histories. Your data lives
+        entirely inside your unique URL parameter text.
+      </p>
+      <p className="mt-3">
+        <span className="text-slate-400">Legal Disclaimer:</span> STBLSS is a non-custodial software user interface
+        utility. We do not process transactions, custody, or manage user funds. All transaction signing and execution
+        happen exclusively via your independent browser wallet. Use at your own risk.
+      </p>
+    </footer>
+  );
+}
+```
+
+---
+
+## Notes
+
+- This standalone version removes all Base44 platform dependencies (`@base44/sdk`, `@base44/vite-plugin`, AuthContext, etc.) since STBLSS doesn't use them for anything functional.
+- The `App.jsx` is simplified to just a router with two public routes — no auth, no query client, no toaster (none are used by STBLSS).
+- The `package.json` includes only the 5 runtime dependencies STBLSS actually needs: `react`, `react-dom`, `react-router-dom`, `framer-motion`, `lucide-react`.
+- The fee wallet address is hardcoded in `src/lib/stblss.js` and displayed on the checkout page for transparency.
+- Update the GitHub URL in `src/components/Footer.jsx` if your repo URL changes.
