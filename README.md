@@ -1,4 +1,4 @@
-# STBLSS
+# STBLSS.com
 
 An Open-Source, Stateless Stablecoin Payment Route.
 
