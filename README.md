@@ -1,17 +1,33 @@
-# STBLSS.COM
+# STBLSS - The One-Click Stablecoin Invoice Terminal
 
-An Open-Source, Stateless Stablecoin Payment Route.
+Welcome to the official open-source repository for **STBLSS.com**! 
 
-STBLSS is an independent software utility that removes human error and volatility risk from peer-to-peer digital dollar transactions. Built entirely on the client side with no accounts, no server databases, and no tracking cookies. Paste your address to instantly generate a typo-proof stablecoin checkout link. Our open code transparently routes payments directly through your own browser wallet—99% to the receiver, 1% terminal fee. Pure utility. Stable value. Zero middleman.
+STBLSS is a completely stateless, anonymous frontend user-interface utility designed to eliminate manual input friction, client confusion, and network configuration mistakes from global peer-to-peer stablecoin transactions.
 
-## Source Code
+## ⚡ The New Angle: Eliminating Manual P2P Friction
+Traditional Web3 invoicing forces independent global creators to paste raw 42-character wallet strings into direct messages and pray that their clients manually configure their custom network, select the correct asset contract, and type the price accurately. Every single manual step is a broken UX friction point that delays paydays.
 
-The complete standalone source bundle is in `# STBLSS — Standalone Source Bundle.txt` at the root of this repository.
+STBLSS bridges this exact communication gap by automating the entire configuration step before the wallet app is even approved. 
 
-## Privacy
+* **Zero-Friction Invoicing:** Generate a one-click, automated stablecoin invoice link in 10 seconds. 
+* **Zero Manual Payer Input:** STBLSS instantly autofills the network, token, and invoice amount inside the payer's wallet extension upon opening. The client doesn't have to copy, paste, or type a single parameter.
+* **100% Stateless Infrastructure:** No server databases, no user accounts, no tracking cookies, and no recurring software subscriptions. Your data lives strictly inside your browser-generated URL string text parameters.
 
-STBLSS is completely stateless. We do not use accounts or backend databases. We collect zero personal information, IP logs, or financial histories. Your data lives entirely inside your unique URL parameter text.
+## 🥷 Our Open Philosophy: "Don't Trust, Verify"
+We know that in the Web3 ecosystem, trust isn't built on corporate logos—it is built on transparent code execution. This public repository exists so that any independent contractor, client, or security auditor can audit our frontend layout line-by-line.
 
-## Legal Disclaimer
+### 🛠️ Transparency & The On-Chain Fee Split
+When the payer lands on the checkout path and clicks **"Connect Wallet & Pay Now"**, the frontend JavaScript directly interacts with the browser extension wallet (window.ethereum) and bundles two simultaneous commands into a single, atomic transaction payload:
+1. **99% of the transaction value** routes immediately and directly peer-to-peer to the Recipient's Address.
+2. **Exactly 1% of the value** routes automatically to our hardcoded platform fee wallet to keep this terminal running.
 
-STBLSS is a non-custodial software user interface utility. We do not process transactions, custody, or manage user funds. All transaction signing and execution happen exclusively via your independent browser wallet. Use at your own risk.
+Our code is completely open-source so you can verify that 0% of your funds ever route through any hidden intermediaries or custodial smart contracts managed by this project. 
+
+## 🛡️ Security & Legal Guardrails
+Because all financial operations are executed strictly client-side via your independent wallet application directly on public blockchain ledgers, STBLSS is legally classified as a software publisher and user-interface layer. We do not act as an intermediate payment processor, broker, or financial custodian. 
+
+Use this software at your own risk. Always verify your network status indicators inside your connected browser wallet app before signing any transaction confirmations.
+
+---
+[Visit the Live Application at STBLSS.com](https://stblss.com)
+
