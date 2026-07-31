@@ -1,6 +1,6 @@
 # STBLSS — Standalone Source Bundle
 
-This file contains the **complete, standalone source code** for STBLSS, stripped of all Base44 platform dependencies. It is a pure Vite + React + Tailwind CSS app that builds and runs anywhere — no backend, no database, no accounts.
+This file contains the **complete, standalone source code** for STBLSS. It is a pure Vite + React + Tailwind CSS app that builds and runs anywhere with no backend, no database, and no accounts.
 
 ## How to use this bundle
 
