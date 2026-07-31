@@ -731,7 +731,7 @@ export default function Generator() {
       <div className="mx-auto max-w-3xl px-6 pt-20">
         <h1 className="text-5xl font-black tracking-tight text-white md:text-7xl">STBLSS</h1>
         <p className="mt-4 max-w-2xl text-lg font-medium leading-relaxed text-emerald-400">
-          Generate a secure, typo-proof stablecoin payment link in 10 seconds. Our platform is completely open source, requiring no signups, no cookies, no subscriptions, zero data tracking, and zero transaction anxiety. Copy your link, send it to the payer, and collect your funds instantly — you keep 99%, with just a 1% terminal fee.
+          Generate a one-click, automated stablecoin checkout link in 10 seconds. Our platform is completely open source, requiring no signups, no cookies, no subscriptions, and zero manual input from your payer. STBLSS autofills the network, token, and amount inside their wallet. Copy your link, send it globally, and collect your funds seamlessly. You keep 99%, with just a 1% terminal convenience fee.
         </p>
 
         <div className="mt-12 space-y-5 rounded-3xl border border-slate-800 bg-slate-900/40 p-6 md:p-8">
