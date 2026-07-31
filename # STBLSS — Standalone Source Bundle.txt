@@ -1424,17 +1424,17 @@ const STEPS = [
   {
     n: "01",
     title: "Input & Verify",
-    body: "Connect your wallet or paste your 0x address. STBLSS runs EIP-55 checksum validation to block typos before the link even exists — so the 'did I mistype it?' fear never starts. Pick your network, enter the amount due.",
+    body: "Tap Connect & Autofill or paste your 0x address. STBLSS runs EIP-55 checksum validation to block typos before the link even exists, so the 'did I mistype it?' fear never starts. Pick your network, token, and invoice amount, and add an optional memo and due date.",
   },
   {
     n: "02",
     title: "Share Your Link",
-    body: "Click generate. STBLSS compiles your payment into an anonymous, stateless link — no account, no backend, no trail to worry about. Copy and send it.",
+    body: "Click generate. STBLSS compiles your payment into an anonymous, stateless link. No account, no backend, no trail to worry about. Copy and send it anywhere in the world.",
   },
   {
     n: "03",
     title: "Collect Anxiety-Free",
-    body: "Your payer opens the link, sees the recipient address in plain text, verifies it on a block explorer in one tap, then pays from their own wallet. 99% to you, 1% fee, zero custody, zero panic.",
+    body: "Your payer opens the link and sees the recipient address in plain text, verifiable on a block explorer in one tap. STBLSS autofills the network, token, and amount inside their wallet, so they just click Connect Wallet & Pay Now and confirm. 99% to you, 1% fee, zero custody, zero panic. It only flips to Paid after the network confirms each transfer on-chain.",
   },
 ];
 
