@@ -4,7 +4,7 @@ Welcome to the official open-source repository for **STBLSS.com**!
 
 STBLSS is a completely stateless, anonymous frontend user-interface utility designed to eliminate manual input friction, client confusion, and network configuration mistakes from global peer-to-peer stablecoin transactions.
 
-## ⚡ The New Angle: Eliminating Manual P2P Friction
+## ⚡Eliminating Manual P2P Friction
 
 According to International Labour Organization (ILO) data, there are now over **1.57 billion independent workers worldwide**, making up roughly 46.6% of the global workforce. Millions of direct, off-platform freelancers outside the US actively choose to get paid in stablecoins (USDC/USDT) to preserve their purchasing power against fluctuating local currency inflation. 
 
