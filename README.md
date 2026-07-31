@@ -1,4 +1,4 @@
-# STBLSS - The One-Click Stablecoin Invoice Terminal
+# STBLSS.COM - The One-Click Stablecoin Invoice Terminal
 
 Welcome to the official open-source repository for **STBLSS.com**! 
 
