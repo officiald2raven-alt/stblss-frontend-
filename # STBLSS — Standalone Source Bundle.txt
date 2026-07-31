@@ -24,6 +24,11 @@ stblss/
 ├── jsconfig.json
 ├── .gitignore
 ├── README.md
+├── public/
+│   ├── manifest.json
+│   ├── sw.js
+│   ├── icon.svg
+│   └── icon-maskable.svg
 └── src/
     ├── main.jsx
     ├── App.jsx
@@ -44,6 +49,7 @@ stblss/
         ├── CopyButton.jsx
         ├── RecipientAddressInput.jsx
         ├── HowItWorks.jsx
+        ├── InstallPrompt.jsx
         └── Footer.jsx
 ```
 
@@ -270,7 +276,13 @@ dist-ssr
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#020617" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="STBLSS" />
     <title>STBLSS</title>
     <meta name="description" content="An open-source, stateless stablecoin payment terminal. Generate and collect stablecoin invoices without backend tracking. Non-custodial. EIP-55 typo protection." />
   </head>
@@ -357,6 +369,17 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from '@/App.jsx'
 import '@/index.css'
+
+// Register the STBLSS service worker for instant, offline-capable
+// app-shell loading on mobile networks. Stateless — never caches user
+// invoice URL parameters or blockchain RPC responses.
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {
+      // SW registration is a progressive enhancement — never block the app.
+    });
+  });
+}
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <App />
@@ -746,6 +769,7 @@ import CopyButton from "@/components/CopyButton";
 import RecipientAddressInput from "@/components/RecipientAddressInput";
 import HowItWorks from "@/components/HowItWorks";
 import Footer from "@/components/Footer";
+import InstallPrompt from "@/components/InstallPrompt";
 
 export default function Generator() {
   const [form, setForm] = useState({ to: "", net: "base", token: "USDC", amt: "", memo: "", due: "" });
@@ -773,7 +797,10 @@ export default function Generator() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <div className="mx-auto max-w-3xl px-6 pt-20">
-        <h1 className="text-5xl font-black tracking-tight text-white md:text-7xl">STBLSS</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-5xl font-black tracking-tight text-white md:text-7xl">STBLSS</h1>
+          <InstallPrompt />
+        </div>
         <p className="mt-4 max-w-2xl text-lg font-medium leading-relaxed text-emerald-400">
           Generate a one-click, automated stablecoin invoice link in 10 seconds. Our platform is completely open source, requiring no signups, no cookies, no subscriptions, and zero manual input from your payer. STBLSS autofills the network, token, and invoice amount inside their wallet. Copy your link, send it globally, and save local PDF receipts instantly. You keep 99%, with just a 1% terminal convenience fee.
         </p>
@@ -876,6 +903,7 @@ import PayButton from "@/components/PayButton";
 import PaidConfirmation from "@/components/PaidConfirmation";
 import PrintReceipt from "@/components/PrintReceipt";
 import Footer from "@/components/Footer";
+import InstallPrompt from "@/components/InstallPrompt";
 
 export default function Checkout() {
   const params = new URLSearchParams(window.location.search);
@@ -896,9 +924,12 @@ export default function Checkout() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <div className="mx-auto max-w-2xl px-6 pt-16">
-        <Link to="/" className="text-sm font-black tracking-tight text-slate-500 hover:text-white">
-          STBLSS
-        </Link>
+        <div className="flex items-center justify-between">
+          <Link to="/" className="text-sm font-black tracking-tight text-slate-500 hover:text-white">
+            STBLSS
+          </Link>
+          <InstallPrompt />
+        </div>
 
         {invalid ? (
           <div className="mt-16 rounded-3xl border border-slate-800 bg-slate-900/40 p-10 text-center">
@@ -1613,6 +1644,244 @@ export default function Footer() {
 }
 ```
 
+=== FILE: public/manifest.json ===
+
+```json
+{
+  "name": "STBLSS — Stateless Stablecoin Terminal",
+  "short_name": "STBLSS",
+  "description": "Generate and collect stablecoin invoices. Stateless, non-custodial, no signups, no cookies.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "categories": ["finance", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
+```
+
+=== FILE: public/sw.js ===
+
+```js
+// STBLSS Service Worker — lightweight, stateless frontend cache.
+// Caches the app shell (HTML, JS, CSS, SVG icons) so the app loads
+// instantly on mobile networks and works offline. Never caches
+// blockchain RPC responses or user URL parameters — those are fetched
+// live every time. No backend, no tracking.
+const CACHE = "stblss-v1";
+const SHELL = [
+  "/",
+  "/index.html",
+  "/manifest.json",
+  "/icon.svg",
+  "/icon-maskable.svg",
+];
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting())
+  );
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
+    ).then(() => self.clients.claim())
+  );
+});
+
+// Stale-while-revalidate for same-origin GET requests only.
+// URL query strings (invoice params) are never cached — each
+// checkout link loads fresh from the network.
+self.addEventListener("fetch", (event) => {
+  const req = event.request;
+  if (req.method !== "GET") return;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return; // never cache cross-origin RPC
+  if (url.search && url.pathname === "/checkout") {
+    // Preserve stateless invoice links — always network-first, never cached.
+    event.respondWith(fetch(req));
+    return;
+  }
+  event.respondWith(
+    caches.match(req).then((cached) => {
+      const network = fetch(req)
+        .then((res) => {
+          if (res && res.status === 200 && res.type === "basic") {
+            const copy = res.clone();
+            caches.open(CACHE).then((cache) => cache.put(req, copy));
+          }
+          return res;
+        })
+        .catch(() => cached);
+      return cached || network;
+    })
+  );
+});
+```
+
+=== FILE: public/icon.svg ===
+
+```svg
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#020617"/>
+  <rect x="56" y="56" width="400" height="400" rx="88" fill="none" stroke="#34d399" stroke-width="14"/>
+  <path d="M176 160 L176 352 L256 352 C320 352 360 312 360 256 C360 200 320 160 256 160 Z" fill="#34d399"/>
+  <circle cx="256" cy="256" r="40" fill="#ffffff"/>
+  <rect x="336" y="96" width="80" height="80" rx="20" fill="#ffffff"/>
+  <rect x="96" y="336" width="80" height="80" rx="20" fill="#34d399"/>
+</svg>
+```
+
+=== FILE: public/icon-maskable.svg ===
+
+```svg
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#020617"/>
+  <rect x="96" y="96" width="320" height="320" rx="64" fill="none" stroke="#34d399" stroke-width="20"/>
+  <path d="M196 176 L196 336 L276 336 C340 336 380 296 380 256 C380 216 340 176 276 176 Z" fill="#34d399"/>
+  <circle cx="276" cy="256" r="36" fill="#ffffff"/>
+</svg>
+```
+
+=== FILE: src/components/InstallPrompt.jsx ===
+
+```jsx
+import React, { useEffect, useState } from "react";
+import { Download, X, Smartphone } from "lucide-react";
+
+// PWA install prompt — catches the browser's native `beforeinstallprompt`
+// event and exposes it via the banner + header button. The installed PWA
+// launches at the exact URL the user was on (including all ?to=&net=&...
+// invoice params), so stateless checkout links survive the install flow.
+const DISMISS_KEY = "stblss_install_dismissed_v1";
+
+export default function InstallPrompt() {
+  const [deferred, setDeferred] = useState(null);
+  const [showBanner, setShowBanner] = useState(false);
+  const [showButton, setShowButton] = useState(false);
+  const [installed, setInstalled] = useState(false);
+
+  useEffect(() => {
+    // Already installed as a standalone PWA? Hide everything.
+    const standalone =
+      window.matchMedia?.("(display-mode: standalone)")?.matches ||
+      window.navigator.standalone === true;
+    if (standalone) {
+      setInstalled(true);
+      return;
+    }
+
+    const onBefore = (e) => {
+      e.preventDefault(); // stop the browser's default infobar; we'll prompt on tap
+      setDeferred(e);
+      const dismissed = sessionStorage.getItem(DISMISS_KEY);
+      if (!dismissed) {
+        setShowBanner(true);
+        setShowButton(true);
+      } else {
+        setShowButton(true); // keep the small header button available
+      }
+    };
+    const onInstalled = () => {
+      setInstalled(true);
+      setDeferred(null);
+      setShowBanner(false);
+      setShowButton(false);
+    };
+    window.addEventListener("beforeinstallprompt", onBefore);
+    window.addEventListener("appinstalled", onInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBefore);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
+  }, []);
+
+  const promptInstall = async () => {
+    if (!deferred) return;
+    deferred.prompt();
+    try {
+      await deferred.userChoice;
+    } finally {
+      setDeferred(null);
+      setShowBanner(false);
+    }
+  };
+
+  const dismissBanner = () => {
+    setShowBanner(false);
+    sessionStorage.setItem(DISMISS_KEY, "1");
+  };
+
+  if (installed) return null;
+
+  return (
+    <>
+      {/* Mobile install banner — top of screen on mobile only */}
+      {showBanner && (
+        <div className="no-print fixed inset-x-0 top-0 z-[60] px-4 pt-3 md:hidden">
+          <div className="flex items-center gap-3 rounded-2xl border border-emerald-400/40 bg-slate-900/95 px-4 py-3 shadow-[0_0_30px_-12px_rgba(52,211,153,0.6)] backdrop-blur">
+            <Smartphone className="h-5 w-5 shrink-0 text-emerald-400" />
+            <div className="flex-1">
+              <p className="text-sm font-bold text-white">Install STBLSS</p>
+              <p className="text-[11px] leading-tight text-slate-400">
+                Add the terminal to your home screen for instant, native access.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={promptInstall}
+              className="shrink-0 rounded-xl bg-emerald-400 px-3 py-2 text-xs font-bold text-slate-950 transition hover:bg-emerald-300"
+            >
+              Install
+            </button>
+            <button
+              type="button"
+              onClick={dismissBanner}
+              aria-label="Dismiss"
+              className="shrink-0 text-slate-500 transition hover:text-slate-200"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Small header install icon button — visible on all sizes when available */}
+      {showButton && (
+        <button
+          type="button"
+          onClick={promptInstall}
+          aria-label="Install STBLSS app"
+          title="Install STBLSS app"
+          className="no-print inline-flex items-center gap-1.5 rounded-xl border border-emerald-400/40 bg-emerald-400/10 px-3 py-2 text-xs font-bold text-emerald-300 transition hover:bg-emerald-400/20"
+        >
+          <Download className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">Install App</span>
+          <span className="sm:hidden">Install</span>
+        </button>
+      )}
+    </>
+  );
+}
+```
+
 ---
 
 ## Notes
@@ -1621,4 +1890,5 @@ export default function Footer() {
 - The `package.json` includes the 6 runtime dependencies STBLSS actually needs: `react`, `react-dom`, `react-router-dom`, `framer-motion`, `lucide-react`, and `js-sha3` (used by the EIP-55 checksum).
 - The fee wallet address is hardcoded in `src/lib/stblss.js` and displayed on the checkout page for transparency.
 - A stateless "Print or Save Receipt" button appears on the checkout page once a payment is confirmed on-chain. It fires `window.print()` and a `@media print` block in `src/index.css` hides the live UI and renders only a clean black-and-white receipt (`#stblss-receipt`) with the brand, total due, token, network, recipient, and Status: Paid. No backend, no storage — the printed/saved PDF is the only durable record.
+- STBLSS is a Progressive Web App. `public/manifest.json` declares the app with a `standalone` display, the electric-green/white geometric `public/icon.svg` + `public/icon-maskable.svg` icons, and the slate `#020617` theme. `public/sw.js` is a lightweight service worker that caches the app shell (HTML, JS, CSS, icons) so the app loads instantly and works offline on mobile networks — it never caches blockchain RPC responses, and any `/checkout?…` URL with invoice params is always fetched live from the network so stateless links are never served from stale cache. `src/components/InstallPrompt.jsx` captures the browser's native `beforeinstallprompt` event and shows a mobile install banner plus a small "Install App" header button on the Generator and Checkout pages; tapping either triggers the native one-tap Add-to-Home-Screen dialog. The installed PWA opens at the exact URL the user was on (query string included), so invoice links survive the install flow flawlessly. `src/main.jsx` registers the service worker on load as a progressive enhancement.
 - Update the GitHub URL in `src/components/Footer.jsx` if your repo URL changes.
