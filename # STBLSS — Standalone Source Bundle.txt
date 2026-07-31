@@ -60,7 +60,7 @@ stblss/
 {
   "name": "stblss",
   "private": true,
-  "version": "1.4.0",
+  "version": "1.5.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -275,11 +275,11 @@ dist-ssr
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/stblss-icon.svg" />
-    <link rel="apple-touch-icon" href="/stblss-icon.svg" />
+    <link rel="icon" type="image/png" href="https://media.base44.com/images/public/6a69241a2e229db2030d9efb/25d5c289e_generated_image.png" />
+    <link rel="apple-touch-icon" href="https://media.base44.com/images/public/6a69241a2e229db2030d9efb/25d5c289e_generated_image.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#222b34" />
+    <meta name="theme-color" content="#1e262e" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="STBLSS" />
@@ -802,7 +802,7 @@ export default function Generator() {
           <InstallPrompt />
         </div>
         <p className="mt-4 max-w-2xl text-lg font-medium leading-relaxed text-emerald-400">
-          Generate a one-click, automated stablecoin invoice link in 10 seconds. Our platform is completely open source, requiring no signups, no cookies, no subscriptions, and zero manual input from your payer. STBLSS autofills the network, token, and invoice amount inside their wallet. Copy your link, send it globally, and save local PDF receipts instantly. You keep 99%, with just a 1% terminal convenience fee.
+          Generate a one-click, automated stablecoin invoice link in 10 seconds. STBLSS is a Web2 utility wrapper built to make peer-to-peer stablecoin transactions completely convenient. Our open-source terminal requires no signups, no cookies, and zero manual input from your payer. STBLSS automatically autofills the network, token, and invoice amount inside their wallet extension. Copy your link, send it globally, and save local PDF receipts instantly. You keep 99%, with just a 1% convenience fee to skip the manual math.
         </p>
 
         <div className="mt-12 space-y-5 rounded-3xl border border-slate-800 bg-slate-900/40 p-6 md:p-8">
@@ -1674,20 +1674,32 @@ export default function Footer() {
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "orientation": "portrait",
-  "background_color": "#222b34",
-  "theme_color": "#222b34",
+  "orientation": "any",
+  "background_color": "#1e293b",
+  "theme_color": "#1e293b",
   "categories": ["finance", "productivity", "utilities"],
   "icons": [
     {
+      "src": "https://media.base44.com/images/public/6a69241a2e229db2030d9efb/25d5c289e_generated_image.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://media.base44.com/images/public/6a69241a2e229db2030d9efb/25d5c289e_generated_image.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
       "src": "/stblss-icon.svg",
-      "sizes": "192x192 512x512 any",
+      "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
     },
     {
       "src": "/stblss-icon.svg",
-      "sizes": "512x512 any",
+      "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "maskable"
     }
@@ -1703,7 +1715,9 @@ export default function Footer() {
 // instantly on mobile networks and works offline. Never caches
 // blockchain RPC responses or user URL parameters — those are fetched
 // live every time. No backend, no tracking.
-const CACHE = "stblss-v1";
+// Bump CACHE when static shell assets (manifest, icons, index.html)
+// change so old cached copies are purged on activate.
+const CACHE = "stblss-v18";
 const SHELL = [
   "/",
   "/index.html",
@@ -1759,15 +1773,15 @@ self.addEventListener("fetch", (event) => {
 
 ```svg
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="STBLSS">
-  <rect width="512" height="512" rx="96" fill="#222b34"/>
-  <defs>
-    <clipPath id="stblss-top"><rect x="0" y="0" width="512" height="224"/></clipPath>
-    <clipPath id="stblss-bot"><rect x="0" y="224" width="512" height="288"/></clipPath>
-  </defs>
-  <path d="M176 112 H352 V176 H240 V272 H352 V336 H176 V272 H288 V176 H176 Z" fill="#00f0b5" clip-path="url(#stblss-top)"/>
-  <path d="M176 112 H352 V176 H240 V272 H352 V336 H176 V272 H288 V176 H176 Z" fill="#ffffff" clip-path="url(#stblss-bot)"/>
+  <rect width="512" height="512" fill="#1e262e"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="60">
+    <path d="M 216 112 H 376 V 256 H 216 V 400 H 376" stroke="#ffffff"/>
+    <path d="M 296 112 H 136 V 256 H 296 V 400 H 136" stroke="#00ffb3"/>
+  </g>
 </svg>
 ```
+
+> Same-origin pure-vector STBLSS monogram (interlocking S, cyan-green + white on charcoal) — used as the manifest install icon and favicon fallback. No external image dependency, so Chrome reliably treats the app as installable and shows the brand mark in the native Install prompt.
 
 === FILE: src/components/InstallPrompt.jsx ===
 
@@ -1786,11 +1800,34 @@ import { Download, X, Share } from "lucide-react";
 // appears; on tap it triggers the native dialog when available, otherwise
 // it surfaces clear, OS-specific "Add to Home Screen" steps so the user is
 // never left with a dead button.
-const isIOS = () => {
-  const ua = navigator.userAgent || "";
-  if (/iphone|ipad|ipod/i.test(ua)) return true;
+const UA = navigator.userAgent || "";
+
+const isIOS = () =>
+  /iphone|ipad|ipod/i.test(UA) ||
   // iPadOS 13+ reports as "Macintosh" by default — detect touch-capable Mac.
-  return /macintosh/i.test(ua) && (navigator.maxTouchPoints || 0) > 0;
+  (/macintosh/i.test(UA) && (navigator.maxTouchPoints || 0) > 0);
+
+// Desktop vs mobile — purely client-side UA detection, no backend.
+const isMobile = () => /android|iphone|ipad|ipod|mobile/i.test(UA);
+
+// Identify the actual browser so the manual steps name the correct menu icon
+// instead of assuming Chrome on every device.
+const detectBrowser = () => {
+  if (/OPR\/|Opera/.test(UA)) return "opera";
+  if (/Edg\//.test(UA)) return "edge";
+  if (/SamsungBrowser/.test(UA)) return "samsung";
+  if (/Firefox\//.test(UA)) return "firefox";
+  if (/Chrome\//.test(UA)) return "chrome";
+  return "other";
+};
+
+const BROWSER_STEPS = {
+  opera: { menu: "Opera's O menu (the round O icon in the top corner)", final: "Install" },
+  edge: { menu: "Edge's menu (the ⋯ icon)", final: "Add to phone / Install" },
+  samsung: { menu: "Samsung Internet's menu (the ≡ icon)", final: "Add to Home screen" },
+  firefox: { menu: "Firefox's menu (the ⋮ icon)", final: "Add to Home screen / Install" },
+  chrome: { menu: "Chrome's menu (the ⋮ icon)", final: "Install app / Add to Home screen" },
+  other: { menu: "your browser's menu", final: "Add to Home screen / Install app" },
 };
 
 export default function InstallPrompt() {
@@ -1838,8 +1875,6 @@ export default function InstallPrompt() {
     }
   };
 
-  if (installed) return null;
-
   return (
     <>
       <button
@@ -1877,14 +1912,21 @@ export default function InstallPrompt() {
             {isIOS() ? (
               <ol className="mt-4 space-y-2 text-sm leading-relaxed text-slate-300">
                 <li>1. Tap the <Share className="inline h-4 w-4 align-[-2px] text-emerald-300" /> Share button in your browser's toolbar.</li>
-                <li>2. Choose <span className="font-semibold text-white">Add to Home Screen</span>.</li>
-                <li>3. Tap <span className="font-semibold text-white">Add</span>.</li>
+                <li>2. Scroll the share sheet and tap <span className="font-semibold text-white">More</span> (or the <span className="font-semibold text-white">⋯</span> icon) to expand the full list if you don't see it right away.</li>
+                <li>3. Choose <span className="font-semibold text-white">Add to Home Screen</span>.</li>
+                <li>4. Tap <span className="font-semibold text-white">Add</span>.</li>
+              </ol>
+            ) : isMobile() ? (
+              <ol className="mt-4 space-y-2 text-sm leading-relaxed text-slate-300">
+                <li>1. Open {(BROWSER_STEPS[detectBrowser()] || BROWSER_STEPS.other).menu}.</li>
+                <li>2. Choose <span className="font-semibold text-white">Install app</span> / <span className="font-semibold text-white">Add to Home screen</span>.</li>
+                <li>3. Tap <span className="font-semibold text-white">{(BROWSER_STEPS[detectBrowser()] || BROWSER_STEPS.other).final}</span>.</li>
               </ol>
             ) : (
               <ol className="mt-4 space-y-2 text-sm leading-relaxed text-slate-300">
-                <li>1. Open your browser's menu (the <span className="font-mono text-lg align-[-2px] text-emerald-300">⋮</span> button in Chrome).</li>
-                <li>2. Choose <span className="font-semibold text-white">Add to Home screen</span> / <span className="font-semibold text-white">Install app</span>.</li>
-                <li>3. Tap <span className="font-semibold text-white">Add</span> or <span className="font-semibold text-white">Install</span>.</li>
+                <li>1. Look for the <span className="font-mono text-lg align-[-2px] text-emerald-300">⊕</span> install icon at the right end of the address bar, or open the browser menu ({detectBrowser() === "edge" ? "Edge ⋯" : detectBrowser() === "firefox" ? "Firefox ☰" : "Chrome ⋮"}).</li>
+                <li>2. Choose <span className="font-semibold text-white">Install STBLSS…</span> (or <span className="font-semibold text-white">Install</span> / <span className="font-semibold text-white">Install app</span>).</li>
+                <li>3. Click <span className="font-semibold text-white">Install</span> in the confirmation dialog.</li>
               </ol>
             )}
             <p className="mt-4 text-[11px] leading-relaxed text-slate-500">
@@ -1906,5 +1948,6 @@ export default function InstallPrompt() {
 - The `package.json` includes the 6 runtime dependencies STBLSS actually needs: `react`, `react-dom`, `react-router-dom`, `framer-motion`, `lucide-react`, and `js-sha3` (used by the EIP-55 checksum).
 - The fee wallet address is hardcoded in `src/lib/stblss.js` and displayed on the checkout page for transparency.
 - A stateless "Print or Save Receipt" button appears on the checkout page once a payment is confirmed on-chain. It fires `window.print()` and a `@media print` block in `src/index.css` hides the live UI and renders only a clean black-and-white receipt (`#stblss-receipt`) with the brand, total due, token, network, recipient, and Status: Paid. No backend, no storage — the printed/saved PDF is the only durable record.
-- STBLSS is a Progressive Web App. `public/manifest.json` declares the app with a `standalone` display, a same-origin `public/stblss-icon.svg` icon (teal/white STBLSS monogram on `#222b34` charcoal, declared at 192/512/any so Chrome treats the app as installable and shows the native Install button), and the `#222b34` theme. `public/sw.js` is a lightweight service worker that caches the app shell (HTML, JS, CSS, icons) so the app loads instantly and works offline on mobile networks — it never caches blockchain RPC responses, and any `/checkout?…` URL with invoice params is always fetched live from the network so stateless links are never served from stale cache. `src/components/InstallPrompt.jsx` exposes the browser's native install flow via a persistent "Install App" header button on the Generator and Checkout pages (the transient on-load mobile banner was removed in favor of the always-available button). Tapping the button triggers the native one-tap Add-to-Home-Screen dialog when the browser offers it; for browsers that don't fire `beforeinstallprompt` (iOS Safari never does, and Chrome only fires it once its install criteria are met), it instead shows clear, OS-specific "Add to Home Screen" steps so the affordance is never a dead button. The installed PWA opens at the exact URL the user was on (query string included), so invoice links survive the install flow flawlessly. `src/main.jsx` registers the service worker on load as a progressive enhancement.
+- STBLSS is a Progressive Web App. `public/manifest.json` declares the app with a `standalone` display, a generated 512×512 emerald "S" PNG (hosted on the Base44 media CDN) as the primary icon for both `any` and `maskable`, with the same-origin `public/stblss-icon.svg` STBLSS monogram as a fallback so Chrome still treats the app as installable and shows the native Install button even if the cross-origin PNG is filtered, and a `#1e293b` slate-blue theme. `index.html` points the favicon and apple-touch-icon at the same CDN PNG. `public/sw.js` (cache `stblss-v18`) is a lightweight service worker that caches the app shell (HTML, JS, CSS, same-origin SVG icon) so the app loads instantly and works offline on mobile networks — it never caches blockchain RPC responses or the cross-origin CDN icon, and any `/checkout?…` URL with invoice params is always fetched live from the network so stateless links are never served from stale cache. `src/components/InstallPrompt.jsx` exposes the browser's native install flow via a persistent "Install App" header button on the Generator and Checkout pages (the transient on-load mobile banner was removed in favor of the always-available button). Tapping the button triggers the native one-tap Add-to-Home-Screen dialog when the browser offers it; for browsers that don't fire `beforeinstallprompt` (iOS Safari never does, and Chrome only fires it once its install criteria are met), it instead shows clear, OS- and browser-specific "Add to Home Screen" steps (iOS Share-sheet, mobile Chrome/Edge/Samsung/Firefox/Opera menu, or desktop address-bar install icon) so the affordance is never a dead button. The installed PWA opens at the exact URL the user was on (query string included), so invoice links survive the install flow flawlessly. `src/main.jsx` registers the service worker on load as a progressive enhancement.
+- The 512×512 brand PNG lives on the Base44 media CDN (`https://media.base44.com/images/public/6a69241a2e229db2030d9efb/25d5c289e_generated_image.png`); it is referenced directly from `index.html` (favicon + apple-touch-icon) and `public/manifest.json` (primary icon). For a fully self-contained fork, drop a local copy into `public/` (e.g. `public/logo-512.png`) and swap the two URLs to the same-origin path — the same-origin `public/stblss-icon.svg` fallback already keeps the app installable without it.
 - Update the GitHub URL in `src/components/Footer.jsx` if your repo URL changes.
