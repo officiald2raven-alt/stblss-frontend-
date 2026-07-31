@@ -37,6 +37,7 @@ stblss/
     └── components/
         ├── PayButton.jsx
         ├── PaidConfirmation.jsx
+        ├── PrintReceipt.jsx
         ├── InvoiceStatus.jsx
         ├── InvoiceField.jsx
         ├── InfoTooltip.jsx
@@ -480,6 +481,49 @@ export default App
     @apply bg-background text-foreground font-body;
   }
 }
+
+/* ----------------------------------------------------------------------------
+   STBLSS print receipt — 100% client-side, stateless, no data stored.
+   When the user clicks "Print or Save Receipt", window.print() fires and
+   this @media print block hides the entire live UI and reveals only the
+   crisp black-and-white receipt (#stblss-receipt) with the essential
+   invoice details: brand, total due, token, network, recipient, status.
+---------------------------------------------------------------------------- */
+@media print {
+  html,
+  body {
+    background: #ffffff !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  #stblss-receipt,
+  #stblss-receipt * {
+    visibility: visible !important;
+  }
+
+  #stblss-receipt {
+    display: block !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  #stblss-receipt * {
+    color: #000000 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+}
 ```
 
 === FILE: src/lib/stblss.js ===
@@ -731,7 +775,7 @@ export default function Generator() {
       <div className="mx-auto max-w-3xl px-6 pt-20">
         <h1 className="text-5xl font-black tracking-tight text-white md:text-7xl">STBLSS</h1>
         <p className="mt-4 max-w-2xl text-lg font-medium leading-relaxed text-emerald-400">
-          Generate a one-click, automated stablecoin invoice link in 10 seconds. Our platform is completely open source, requiring no signups, no cookies, no subscriptions, and zero manual input from your payer. STBLSS autofills the network, token, and invoice amount inside their wallet. Copy your link, send it globally, and collect your funds seamlessly. You keep 99%, with just a 1% terminal convenience fee.
+          Generate a one-click, automated stablecoin invoice link in 10 seconds. Our platform is completely open source, requiring no signups, no cookies, no subscriptions, and zero manual input from your payer. STBLSS autofills the network, token, and invoice amount inside their wallet. Copy your link, send it globally, and save local PDF receipts instantly — you keep 99%, with just a 1% terminal convenience fee.
         </p>
 
         <div className="mt-12 space-y-5 rounded-3xl border border-slate-800 bg-slate-900/40 p-6 md:p-8">
@@ -824,11 +868,13 @@ export default function Generator() {
 ```jsx
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
+import { Printer } from "lucide-react";
 import { NETWORKS, formatAmount, splitAmount, toUnits } from "@/lib/stblss";
 import CopyButton from "@/components/CopyButton";
 import InvoiceStatus from "@/components/InvoiceStatus";
 import PayButton from "@/components/PayButton";
 import PaidConfirmation from "@/components/PaidConfirmation";
+import PrintReceipt from "@/components/PrintReceipt";
 import Footer from "@/components/Footer";
 
 export default function Checkout() {
@@ -864,7 +910,33 @@ export default function Checkout() {
         ) : paid ? (
           <div className="mt-12">
             <PaidConfirmation />
-            <Footer />
+
+            <div className="mt-6 flex flex-col items-center gap-3 no-print">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/60 px-5 py-3 text-sm font-bold text-slate-100 transition hover:border-emerald-400/60 hover:bg-slate-800"
+              >
+                <Printer className="h-4 w-4" /> Print or Save Receipt
+              </button>
+              <p className="max-w-md text-center text-xs leading-relaxed text-slate-500">
+                STBLSS is stateless and never saves your transaction. Once you close this page it cannot be pulled
+                back up, so print or save this receipt now.
+              </p>
+            </div>
+
+            <PrintReceipt
+              amount={formatAmount(amt)}
+              token={token}
+              netLabel={net.label}
+              recipient={to}
+              memo={memo}
+              due={due}
+            />
+
+            <div className="no-print">
+              <Footer />
+            </div>
           </div>
         ) : (
           <>
@@ -1157,6 +1229,61 @@ export default function PaidConfirmation() {
         Both transfers were mined and verified on-chain. No funds were ever held or assumed — your wallet signed every move.
       </p>
     </motion.div>
+  );
+}
+```
+
+=== FILE: src/components/PrintReceipt.jsx ===
+
+```jsx
+import React from "react";
+
+// Stateless, client-side only receipt rendered for window.print().
+// Hidden on screen (display:none) and forced visible only inside the
+// @media print block in src/index.css. STBLSS stores nothing, so this
+// receipt is the only durable record of the transaction.
+export default function PrintReceipt({ amount, token, netLabel, recipient, memo, due }) {
+  const today = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+
+  return (
+    <div id="stblss-receipt" className="hidden bg-white text-black">
+      <div className="mx-auto max-w-md px-8 py-10">
+        <div className="flex items-center justify-between border-b border-black/20 pb-4">
+          <span className="text-2xl font-black tracking-tight">STBLSS</span>
+          <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-black/60">Payment Receipt</span>
+        </div>
+
+        <div className="mt-6 flex items-center gap-2">
+          <span className="rounded border border-black px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider">
+            Status: Paid
+          </span>
+          <span className="text-[11px] text-black/60">Confirmed on-chain</span>
+        </div>
+
+        <dl className="mt-6 space-y-3 text-sm">
+          <Row label="Total Amount Due" value={`${amount} ${token}`} />
+          <Row label="Token" value={token} />
+          <Row label="Target Network" value={netLabel} />
+          <Row label="Recipient Wallet" value={recipient} mono />
+          {memo ? <Row label="Memo" value={memo} /> : null}
+          {due ? <Row label="Due Date" value={due} /> : null}
+        </dl>
+
+        <p className="mt-8 border-t border-black/20 pt-4 text-[10px] leading-relaxed text-black/60">
+          Stateless receipt generated {today}. STBLSS does not store this transaction. Save or print this receipt
+          now; it cannot be recovered later.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function Row({ label, value, mono }) {
+  return (
+    <div className="flex justify-between gap-6">
+      <dt className="text-black/60">{label}</dt>
+      <dd className={`text-right ${mono ? "font-mono text-xs" : "font-medium"}`}>{value}</dd>
+    </div>
   );
 }
 ```
@@ -1493,4 +1620,5 @@ export default function Footer() {
 - The `App.jsx` is a plain router with two public routes (`/`, `/checkout`) with no auth, no query client, and no toaster (none are used by STBLSS).
 - The `package.json` includes the 6 runtime dependencies STBLSS actually needs: `react`, `react-dom`, `react-router-dom`, `framer-motion`, `lucide-react`, and `js-sha3` (used by the EIP-55 checksum).
 - The fee wallet address is hardcoded in `src/lib/stblss.js` and displayed on the checkout page for transparency.
+- A stateless "Print or Save Receipt" button appears on the checkout page once a payment is confirmed on-chain. It fires `window.print()` and a `@media print` block in `src/index.css` hides the live UI and renders only a clean black-and-white receipt (`#stblss-receipt`) with the brand, total due, token, network, recipient, and Status: Paid. No backend, no storage — the printed/saved PDF is the only durable record.
 - Update the GitHub URL in `src/components/Footer.jsx` if your repo URL changes.
