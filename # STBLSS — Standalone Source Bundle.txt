@@ -1490,8 +1490,7 @@ export default function Footer() {
 
 ## Notes
 
-- This standalone version removes all Base44 platform dependencies (`@base44/sdk`, `@base44/vite-plugin`, AuthContext, etc.) since STBLSS doesn't use them for anything functional.
-- The `App.jsx` is a plain router with two public routes (`/`, `/checkout`) — no auth, no query client, no toaster (none are used by STBLSS).
+- The `App.jsx` is a plain router with two public routes (`/`, `/checkout`) with no auth, no query client, and no toaster (none are used by STBLSS).
 - The `package.json` includes the 6 runtime dependencies STBLSS actually needs: `react`, `react-dom`, `react-router-dom`, `framer-motion`, `lucide-react`, and `js-sha3` (used by the EIP-55 checksum).
 - The fee wallet address is hardcoded in `src/lib/stblss.js` and displayed on the checkout page for transparency.
 - Update the GitHub URL in `src/components/Footer.jsx` if your repo URL changes.
