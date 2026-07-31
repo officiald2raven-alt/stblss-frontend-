@@ -728,6 +728,54 @@ export async function checkPaymentStatus(netKey, tokenAddress, recipient, expect
     return { status: "unknown", error: e?.message };
   }
 }
+
+// Stateless EXACT payment verification by transaction hash.
+// When a checkout link carries a `tx=<hash>` parameter (appended by PayButton
+// the instant the payer's wallet confirms on-chain), we verify that specific
+// transaction directly via eth_getTransactionReceipt — no block-window scan,
+// no range limits, instant and definitive. Still 100% client-side over the
+// network's public RPC; no backend, no indexer.
+//
+// Confirms: receipt exists, status === 0x1 (not reverted), and a Transfer log
+// to the recipient for the expected 99% payout value is present in the
+// receipt's logs. Falls back to "unpaid" if the receipt isn't mined yet or
+// the expected transfer isn't found, and "unknown" on RPC failure.
+export async function checkPaymentByHash(netKey, tokenAddress, recipient, expectedPayoutUnits, txHash) {
+  const net = NETWORKS[netKey];
+  if (!net || !net.evm || !tokenAddress || !recipient || !txHash) return { status: "unknown" };
+  const rpc = net.params.rpcUrls[0];
+  const TRANSFER_TOPIC =
+    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b4ef";
+  const toTopic = "0x" + recipient.toLowerCase().replace(/^0x/, "").padStart(64, "0");
+
+  const rpcCall = async (method, params) => {
+    const res = await fetch(rpc, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+    });
+    const json = await res.json();
+    if (json.error) throw new Error(json.error.message || "rpc error");
+    return json.result;
+  };
+
+  try {
+    const receipt = await rpcCall("eth_getTransactionReceipt", [txHash]);
+    if (!receipt) return { status: "unpaid" }; // not mined yet / unknown hash
+    if (Number(receipt.status) !== 1) return { status: "unpaid" }; // reverted
+    const target = BigInt(expectedPayoutUnits);
+    const logs = Array.isArray(receipt.logs) ? receipt.logs : [];
+    for (const log of logs) {
+      if (!log || !Array.isArray(log.topics) || !log.data) continue;
+      if (log.topics[0] !== TRANSFER_TOPIC) continue;
+      if (log.topics[2] !== toTopic) continue;
+      if (BigInt(log.data) === target) return { status: "paid" };
+    }
+    return { status: "unpaid" };
+  } catch (e) {
+    return { status: "unknown", error: e?.message };
+  }
+}
 ```
 
 === FILE: src/lib/utils.js ===
@@ -802,7 +850,7 @@ export default function Generator() {
           <InstallPrompt />
         </div>
         <p className="mt-4 max-w-2xl text-lg font-medium leading-relaxed text-emerald-400">
-          Generate a one-click, automated stablecoin invoice link in 10 seconds. STBLSS is a Web2 utility wrapper built to make peer-to-peer stablecoin transactions completely convenient. Our open-source terminal requires no signups, no cookies, and zero manual input from your payer. STBLSS automatically autofills the network, token, and invoice amount inside their wallet extension. Copy your link, send it globally, and save local PDF receipts instantly.You keep 99%, with just a 1% terminal convenience fee..
+          Generate a one-click, automated stablecoin invoice link in 10 seconds. STBLSS is a Web2 utility wrapper built to make peer-to-peer stablecoin transactions completely convenient. Our open-source terminal requires no signups, no cookies, and zero manual input from your payer. STBLSS automatically autofills the network, token, and invoice amount inside their wallet extension. Copy your link, send it globally, and save local PDF receipts instantly. You keep 99%, with just a 1% terminal convenience fee.
         </p>
 
         <div className="mt-12 space-y-5 rounded-3xl border border-slate-800 bg-slate-900/40 p-6 md:p-8">
@@ -913,6 +961,7 @@ export default function Checkout() {
   const amt = params.get("amt") || "0";
   const memo = params.get("memo") || "";
   const due = params.get("due") || "";
+  const tx = params.get("tx") || "";
   const [paid, setPaid] = useState(false);
 
   const net = NETWORKS[netKey];
@@ -978,6 +1027,7 @@ export default function Checkout() {
                   tokenAddress={tokenInfo.address}
                   recipient={to}
                   expectedPayoutUnits={payoutUnits}
+                  tx={tx}
                 />
               )}
               {memo && (
@@ -1027,7 +1077,25 @@ export default function Checkout() {
               </div>
 
               <div className="mt-8">
-                <PayButton to={to} netKey={netKey} token={token} amount={amt} onPaid={() => setPaid(true)} />
+                <PayButton
+                  to={to}
+                  netKey={netKey}
+                  token={token}
+                  amount={amt}
+                  onPaid={(hash) => {
+                    setPaid(true);
+                    // Append the confirmed tx hash to the URL so reopening this
+                    // link verifies instantly via the exact receipt: no
+                    // block-window scan, no range limit, ever.
+                    if (hash) {
+                      const next = new URLSearchParams(window.location.search);
+                      if (!next.get("tx")) {
+                        next.set("tx", hash);
+                        window.history.replaceState({}, "", `${window.location.pathname}?${next.toString()}`);
+                      }
+                    }
+                  }}
+                />
                 <p className="mt-3 text-center text-[11px] leading-relaxed text-slate-500">
                   Non-custodial: your wallet signs every transfer straight to the stablecoin contract — STBLSS never holds funds, so there's no custodial middleman to worry about. It only flips to "complete" after the network confirms each leg on-chain. Zero custody, zero anxiety.
                 </p>
@@ -1079,13 +1147,17 @@ async function awaitCallsStatus(eth, id, { timeoutMs = 120000, intervalMs = 2500
         const receipts = Array.isArray(res.receipts) ? res.receipts : [];
         // If the wallet returned per-call receipts, verify each succeeded (0x1).
         // If it only returned CONFIRMED with no receipts, accept the wallet's word.
-        return { confirmed: receipts.length ? receipts.every((r) => Number(r.status) === 1) : true };
+        const firstHash = receipts.find((r) => r?.transactionHash)?.transactionHash;
+        return {
+          confirmed: receipts.length ? receipts.every((r) => Number(r.status) === 1) : true,
+          txHash: firstHash || null,
+        };
       }
-      if (status === "FAILED") return { confirmed: false };
+      if (status === "FAILED") return { confirmed: false, txHash: null };
     }
     await new Promise((r) => setTimeout(r, intervalMs));
   }
-  return { confirmed: false };
+  return { confirmed: false, txHash: null };
 }
 
 // Wallet error codes meaning "the user declined the popup" — never auto-retry.
@@ -1141,6 +1213,7 @@ export default function PayButton({ to, netKey, token, amount, onPaid }) {
 
       let confirmed = false;
       let batchedAttempted = false;
+      let txHash = null; // captured so onPaid can append it to the URL for exact re-verification
 
       // --- PREFERRED: EIP-5792 batched send (ONE signature, verified on-chain) ---
       // The wallet signs both transfers at once; we then poll its calls-status
@@ -1161,6 +1234,7 @@ export default function PayButton({ to, netKey, token, amount, onPaid }) {
           setFlow("batched");
           const res = await awaitCallsStatus(eth, callsId);
           confirmed = res.confirmed;
+          if (res.txHash) txHash = res.txHash;
         }
       } catch (batchErr) {
         // User declined the single-signature popup → stop, don't pester with a second.
@@ -1188,6 +1262,7 @@ export default function PayButton({ to, netKey, token, amount, onPaid }) {
           if (hash) hashes.push(hash);
         }
         let allOk = true;
+        if (hashes[0]) txHash = hashes[0]; // the 99% → recipient transfer
         for (const hash of hashes) {
           const { confirmed: ok } = await awaitReceipt(eth, hash);
           if (!ok) { allOk = false; break; }
@@ -1197,7 +1272,7 @@ export default function PayButton({ to, netKey, token, amount, onPaid }) {
 
       if (confirmed) {
         setStatus("paid");
-        onPaid?.();
+        onPaid?.(txHash);
       } else {
         setStatus("idle");
         setError("A transfer did not confirm on-chain in time. Check your wallet or block explorer — your funds are safe and no custodial step was ever involved.");
@@ -1324,7 +1399,7 @@ function Row({ label, value, mono }) {
 ```jsx
 import React, { useState, useEffect } from "react";
 import { Loader2, CheckCircle2, Clock, AlertCircle } from "lucide-react";
-import { checkPaymentStatus } from "@/lib/stblss";
+import { checkPaymentStatus, checkPaymentByHash } from "@/lib/stblss";
 
 const CONFIG = {
   checking: { Icon: Loader2, text: "Verifying on-chain…", cls: "border-slate-700 bg-slate-800/40 text-slate-300", spin: true },
@@ -1333,17 +1408,24 @@ const CONFIG = {
   unknown: { Icon: AlertCircle, text: "Couldn't verify on-chain right now", cls: "border-amber-500/40 bg-amber-500/10 text-amber-300", spin: false },
 };
 
-export default function InvoiceStatus({ netKey, tokenAddress, recipient, expectedPayoutUnits }) {
+export default function InvoiceStatus({ netKey, tokenAddress, recipient, expectedPayoutUnits, tx }) {
   const [state, setState] = useState("checking");
 
   useEffect(() => {
     let active = true;
     setState("checking");
-    checkPaymentStatus(netKey, tokenAddress, recipient, expectedPayoutUnits).then((r) => {
+    // If the checkout link carries a `tx=<hash>` (appended the moment the
+    // payer's wallet confirms), verify that exact transaction by receipt —
+    // instant, definitive, no block-window scan. Otherwise fall back to the
+    // recent-log-window scan for first opens without a hash.
+    const check = tx
+      ? checkPaymentByHash(netKey, tokenAddress, recipient, expectedPayoutUnits, tx)
+      : checkPaymentStatus(netKey, tokenAddress, recipient, expectedPayoutUnits);
+    check.then((r) => {
       if (active) setState(r.status);
     });
     return () => { active = false; };
-  }, [netKey, tokenAddress, recipient, expectedPayoutUnits]);
+  }, [netKey, tokenAddress, recipient, expectedPayoutUnits, tx]);
 
   const { Icon, text, cls, spin } = CONFIG[state] || CONFIG.unknown;
 
@@ -1947,6 +2029,7 @@ export default function InstallPrompt() {
 - The `App.jsx` is a plain router with two public routes (`/`, `/checkout`) with no auth, no query client, and no toaster (none are used by STBLSS).
 - The `package.json` includes the 6 runtime dependencies STBLSS actually needs: `react`, `react-dom`, `react-router-dom`, `framer-motion`, `lucide-react`, and `js-sha3` (used by the EIP-55 checksum).
 - The fee wallet address is hardcoded in `src/lib/stblss.js` and displayed on the checkout page for transparency.
+- **Exact on-chain verification by tx hash.** The moment the payer's wallet confirms a payment, `PayButton` captures the transaction hash (the 99% recipient transfer) and `Checkout` appends it to the URL as `tx=<hash>` via `window.history.replaceState` (no page reload, no backend, fully stateless). When anyone reopens that link, `InvoiceStatus` calls `checkPaymentByHash` in `src/lib/stblss.js`, which does a single `eth_getTransactionReceipt` against the network's public RPC and verifies the receipt status is `0x1` and a Transfer log to the recipient for the expected 99% payout value is present. This is instant and definitive with no block-window range limit, so an old paid invoice shows "Paid · verified on-chain" forever instead of falling back to the recent-window log scan. Links without a `tx=` param (first open, or a batched wallet that didn't expose a receipt hash) still use the original recent-window `checkPaymentStatus` scan — the new path is purely additive and changes nothing about the stateless, non-custodial core.
 - A stateless "Print or Save Receipt" button appears on the checkout page once a payment is confirmed on-chain. It fires `window.print()` and a `@media print` block in `src/index.css` hides the live UI and renders only a clean black-and-white receipt (`#stblss-receipt`) with the brand, total due, token, network, recipient, and Status: Paid. No backend, no storage — the printed/saved PDF is the only durable record.
 - STBLSS is a Progressive Web App. `public/manifest.json` declares the app with a `standalone` display, a generated 512×512 emerald "S" PNG (hosted on the Base44 media CDN) as the primary icon for both `any` and `maskable`, with the same-origin `public/stblss-icon.svg` STBLSS monogram as a fallback so Chrome still treats the app as installable and shows the native Install button even if the cross-origin PNG is filtered, and a `#1e293b` slate-blue theme. `index.html` points the favicon and apple-touch-icon at the same CDN PNG. `public/sw.js` (cache `stblss-v18`) is a lightweight service worker that caches the app shell (HTML, JS, CSS, same-origin SVG icon) so the app loads instantly and works offline on mobile networks — it never caches blockchain RPC responses or the cross-origin CDN icon, and any `/checkout?…` URL with invoice params is always fetched live from the network so stateless links are never served from stale cache. `src/components/InstallPrompt.jsx` exposes the browser's native install flow via a persistent "Install App" header button on the Generator and Checkout pages (the transient on-load mobile banner was removed in favor of the always-available button). Tapping the button triggers the native one-tap Add-to-Home-Screen dialog when the browser offers it; for browsers that don't fire `beforeinstallprompt` (iOS Safari never does, and Chrome only fires it once its install criteria are met), it instead shows clear, OS- and browser-specific "Add to Home Screen" steps (iOS Share-sheet, mobile Chrome/Edge/Samsung/Firefox/Opera menu, or desktop address-bar install icon) so the affordance is never a dead button. The installed PWA opens at the exact URL the user was on (query string included), so invoice links survive the install flow flawlessly. `src/main.jsx` registers the service worker on load as a progressive enhancement.
 - The 512×512 brand PNG lives on the Base44 media CDN (`https://media.base44.com/images/public/6a69241a2e229db2030d9efb/25d5c289e_generated_image.png`); it is referenced directly from `index.html` (favicon + apple-touch-icon) and `public/manifest.json` (primary icon). For a fully self-contained fork, drop a local copy into `public/` (e.g. `public/logo-512.png`) and swap the two URLs to the same-origin path — the same-origin `public/stblss-icon.svg` fallback already keeps the app installable without it.
