@@ -12,6 +12,7 @@ STBLSS bridges this exact communication gap by automating the entire configurati
 * **Zero-Friction Invoicing:** Generate a one-click, automated stablecoin invoice link in 10 seconds. 
 * **Zero Manual Payer Input:** STBLSS instantly autofills the network, token, and invoice amount inside the payer's wallet extension upon opening. The client doesn't have to copy, paste, or type a single parameter.
 * **100% Stateless Infrastructure:** No server databases, no user accounts, no tracking cookies, and no recurring software subscriptions. Your data lives strictly inside your browser-generated URL string text parameters.
+* **Local Receipt Architecture: Includes a local window.print() module allowing both parties to save clean PDF records for personal accounting. Receipt generation executes entirely client-side, ensuring your business records stay strictly private to your local hard drive.
 
 ## 🥷 Our Open Philosophy: "Don't Trust, Verify"
 We know that in the Web3 ecosystem, trust isn't built on corporate logos—it is built on transparent code execution. This public repository exists so that any independent contractor, client, or security auditor can audit our frontend layout line-by-line.
