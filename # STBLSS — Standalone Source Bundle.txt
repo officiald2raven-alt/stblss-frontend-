@@ -802,7 +802,7 @@ export default function Generator() {
           <InstallPrompt />
         </div>
         <p className="mt-4 max-w-2xl text-lg font-medium leading-relaxed text-emerald-400">
-          Generate a one-click, automated stablecoin invoice link in 10 seconds. STBLSS is a Web2 utility wrapper built to make peer-to-peer stablecoin transactions completely convenient. Our open-source terminal requires no signups, no cookies, and zero manual input from your payer. STBLSS automatically autofills the network, token, and invoice amount inside their wallet extension. Copy your link, send it globally, and save local PDF receipts instantly. You keep 99%, with just a 1% convenience fee to skip the manual math.
+          Generate a one-click, automated stablecoin invoice link in 10 seconds. STBLSS is a Web2 utility wrapper built to make peer-to-peer stablecoin transactions completely convenient. Our open-source terminal requires no signups, no cookies, and zero manual input from your payer. STBLSS automatically autofills the network, token, and invoice amount inside their wallet extension. Copy your link, send it globally, and save local PDF receipts instantly. You keep 99%, with just a 1% convenience fee to keep the terminal going.
         </p>
 
         <div className="mt-12 space-y-5 rounded-3xl border border-slate-800 bg-slate-900/40 p-6 md:p-8">
