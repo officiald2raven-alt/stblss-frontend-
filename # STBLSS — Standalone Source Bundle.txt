@@ -651,32 +651,39 @@ export function isEvmAddress(addr = "") {
   return /^0x[a-fA-F0-9]{40}$/.test(addr.trim());
 }
 
+// EIP-55 mixed-case checksum: convert any valid 0x address into its
+// canonical mixed-case form. Browser wallets almost always hand back the
+// account in all-lowercase; restoring the checksummed casing makes the field
+// display the real EIP-55 form and lets isChecksumValid verify it. Pure math,
+// no network calls. Uses `js-sha3` keccak256.
+import { keccak_256 } from "js-sha3";
+export function toChecksumAddress(addr = "") {
+  const raw = addr.trim();
+  if (!/^0x[a-fA-F0-9]{40}$/.test(raw)) return raw;
+  const hex = raw.slice(2).toLowerCase();
+  const hash = keccak_256(hex);
+  let checksummed = "0x";
+  for (let i = 0; i < hex.length; i++) {
+    const c = hex[i];
+    checksummed += /[0-9]/.test(c) ? c : (parseInt(hash[i], 16) >= 8 ? c.toUpperCase() : c);
+  }
+  return checksummed;
+}
+
 // EIP-55 mixed-case checksum verification.
 // Every EVM address carries a built-in checksum encoded in the casing of its
 // hex letters. If a single character is mistyped (but still valid hex + length),
-// the recomputed checksum won't match and we can flag it — pure math, no
-// network calls, runs entirely in the browser. This is the strongest no-backend
-// guard against recipient setup errors (the one hole format-validation alone
-// cannot close). Uses `js-sha3` keccak256; all-lowercase or all-uppercase
-// addresses have NO checksum encoded, so they are treated as "unverified" (null).
-import { keccak_256 } from "js-sha3";
+// the recomputed casing won't match and we can flag it — pure math, no network
+// calls, runs entirely in the browser. This is the strongest no-backend guard
+// against recipient setup errors (the one hole format-validation alone cannot
+// close). All-lowercase or all-uppercase addresses have NO checksum encoded, so
+// they are treated as "unverified" (null) rather than "bad".
 export function isChecksumValid(addr = "") {
   const raw = addr.trim();
   if (!/^0x[a-fA-F0-9]{40}$/.test(raw)) return false;
   // All-lowercase or all-uppercase = no checksum encoded → cannot verify.
   if (raw === raw.toLowerCase() || raw === raw.toUpperCase()) return null;
-  const hex = raw.slice(2);
-  const hash = keccak_256(hex.toLowerCase());
-  let checksummed = "0x";
-  for (let i = 0; i < hex.length; i++) {
-    const c = hex[i];
-    if (/[0-9]/.test(c)) {
-      checksummed += c;
-    } else {
-      checksummed += parseInt(hash[i], 16) >= 8 ? c.toUpperCase() : c.toLowerCase();
-    }
-  }
-  return checksummed === raw;
+  return toChecksumAddress(raw) === raw;
 }
 
 // Stateless on-chain "paid" check — reads the chosen network's public RPC
@@ -1559,11 +1566,13 @@ export default function CopyButton({ value, label = "Copy Link", className = "" 
 ```jsx
 import React, { useState } from "react";
 import { ShieldCheck, AlertTriangle, ClipboardPaste, Wallet, X } from "lucide-react";
-import { isEvmAddress, isChecksumValid } from "@/lib/stblss";
+import { isEvmAddress, isChecksumValid, toChecksumAddress } from "@/lib/stblss";
 
 // Recipient address entry — paste-only (no QR, no manual-typing risk).
 // Users copy the address from their wallet app and paste it here. EIP-55
 // checksum still guards any pasted value against single-character typos.
+// Wallets return addresses in all-lowercase; toChecksumAddress restores the
+// EIP-55 mixed-case form so the field shows the canonical address.
 export default function RecipientAddressInput({ value, onChange }) {
   const addr = (value || "").trim();
   const addrValid = isEvmAddress(addr);
@@ -1575,7 +1584,9 @@ export default function RecipientAddressInput({ value, onChange }) {
   const pasteFromClipboard = async () => {
     try {
       const text = await navigator.clipboard.readText();
-      if (text) onChange(text.trim());
+      // Wallets/clipboards often return the address in all-lowercase; restore
+      // the EIP-55 mixed-case checksum so the field shows the canonical form.
+      if (text) onChange(toChecksumAddress(text.trim()));
     } catch {
       // Clipboard read blocked — paste manually into the field below.
     }
@@ -1598,7 +1609,9 @@ export default function RecipientAddressInput({ value, onChange }) {
     try {
       const accounts = await eth.request({ method: "eth_requestAccounts" });
       if (accounts?.[0]) {
-        onChange(accounts[0]);
+        // Wallets return the account in all-lowercase; convert to the EIP-55
+        // mixed-case checksum so the field displays (and verifies) the real form.
+        onChange(toChecksumAddress(accounts[0]));
       } else {
         setNotice("Your wallet didn't return an account. Paste your address manually above.");
       }
