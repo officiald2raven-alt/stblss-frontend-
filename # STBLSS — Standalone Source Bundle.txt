@@ -889,7 +889,7 @@ export default function Generator() {
           <InstallPrompt />
         </div>
         <p className="mt-4 max-w-2xl text-lg font-medium leading-relaxed text-emerald-400">
-          Generate a one-click, automated stablecoin invoice link in 10 seconds. STBLSS is a Web2 utility wrapper built to make peer-to-peer stablecoin transactions completely convenient. Our open-source terminal requires no signups, no cookies, and zero manual input from your payer. STBLSS automatically autofills the network, token, and invoice amount inside their wallet extension. Copy your link, send it globally, and save local PDF receipts instantly. You keep 99%, with just a 1% terminal convenience fee.
+          Create a one-click stablecoin payment link in seconds. STBLSS is a lightweight web-based tool designed to simplify peer-to-peer crypto payments. There's no account creation, no cookies, and no manual data entry needed on the payer's side. Our open-source terminal automatically populates the correct network, token type, and amount directly in their wallet extension. Just generate the link, share it anywhere, and download PDF receipts on the spot. You keep 99% of every payment, with a small 1% fee for using the platform. Because STBLSS is non-custodial, your wallet handles every transaction directly, and we never touch or hold your funds.
         </p>
 
         <div className="mt-12 space-y-5 rounded-3xl border border-slate-800 bg-slate-900/40 p-6 md:p-8">
