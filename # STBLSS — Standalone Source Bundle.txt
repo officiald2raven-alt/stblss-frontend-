@@ -1085,7 +1085,10 @@ export default function Checkout() {
                 />
               )}
               {memo && (
-                <p className="mb-2 text-sm font-semibold text-slate-300">{memo}</p>
+                <div className="mb-4 rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Invoice Memo</p>
+                  <p className="mt-1 text-base font-semibold text-white">{memo}</p>
+                </div>
               )}
               {due && (
                 <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-300">
@@ -1572,7 +1575,7 @@ const CONFIG = {
   checking: { Icon: Loader2, text: "Verifying on-chain…", cls: "border-slate-700 bg-slate-800/40 text-slate-300", spin: true },
   paid: { Icon: CheckCircle2, text: "Paid · verified on-chain", cls: "border-emerald-400/50 bg-emerald-400/10 text-emerald-300", spin: false },
   unpaid: { Icon: Clock, text: "Not yet detected on-chain", cls: "border-slate-700 bg-slate-800/40 text-slate-400", spin: false },
-  unknown: { Icon: AlertCircle, text: "Couldn't verify on-chain right now", cls: "border-amber-500/40 bg-amber-500/10 text-amber-300", spin: false },
+  unknown: { Icon: AlertCircle, text: "Verification unavailable right now", cls: "border-slate-700 bg-slate-800/40 text-slate-500", spin: false },
 };
 
 export default function InvoiceStatus({ netKey, tokenAddress, recipient, expectedPayoutUnits, tx }) {
@@ -1580,17 +1583,28 @@ export default function InvoiceStatus({ netKey, tokenAddress, recipient, expecte
 
   useEffect(() => {
     let active = true;
+    let retried = false;
     setState("checking");
     // If the checkout link carries a `tx=<hash>` (appended the moment the
-    // payer's wallet confirms), verify that exact transaction by receipt —
+    // payer's wallet confirms), verify that exact transaction by receipt:
     // instant, definitive, no block-window scan. Otherwise fall back to the
     // recent-log-window scan for first opens without a hash.
-    const check = tx
-      ? checkPaymentByHash(netKey, tokenAddress, recipient, expectedPayoutUnits, tx)
-      : checkPaymentStatus(netKey, tokenAddress, recipient, expectedPayoutUnits);
-    check.then((r) => {
-      if (active) setState(r.status);
-    });
+    const run = async () => {
+      const r = tx
+        ? await checkPaymentByHash(netKey, tokenAddress, recipient, expectedPayoutUnits, tx)
+        : await checkPaymentStatus(netKey, tokenAddress, recipient, expectedPayoutUnits);
+      if (!active) return;
+      // A transient public-RPC blip should never read as "something is wrong"
+      // on a cold load. Silently retry once before surfacing the muted
+      // "unknown" state, so a hiccup never alarms the payer.
+      if (r.status === "unknown" && !retried) {
+        retried = true;
+        setTimeout(run, 2500);
+        return;
+      }
+      setState(r.status);
+    };
+    run();
     return () => { active = false; };
   }, [netKey, tokenAddress, recipient, expectedPayoutUnits, tx]);
 
