@@ -1281,6 +1281,10 @@ export default function PayButton({ to, netKey, token, amount, onPaid }) {
       return;
     }
 
+    // Declared OUTSIDE the try so the catch can read it: once any transfer is
+    // submitted on-chain, a later error must route to the "may already be pending"
+    // warning rather than quietly resetting the Pay button (which would re-send).
+    let mayHaveSent = false;
     setStatus("working");
     try {
       const accounts = await eth.request({ method: "eth_requestAccounts" });
@@ -1319,7 +1323,6 @@ export default function PayButton({ to, netKey, token, amount, onPaid }) {
 
       let confirmed = false;
       let batchedAttempted = false;
-      let mayHaveSent = false; // true once any transfer is submitted on-chain — guards against a double-send on retry
       let txHash = null; // captured so onPaid can append it to the URL for exact re-verification
 
       // --- PREFERRED: EIP-5792 batched send (ONE signature, verified on-chain) ---
@@ -1368,9 +1371,15 @@ export default function PayButton({ to, netKey, token, amount, onPaid }) {
         const hashes = [];
         for (const call of calls) {
           const hash = await eth.request({ method: "eth_sendTransaction", params: [{ from, to: call.to, data: call.data }] });
-          if (hash) hashes.push(hash);
+          if (hash) {
+            hashes.push(hash);
+            // Mark the instant the first transfer is submitted on-chain — NOT after
+            // both attempts finish. If the 1% fee call below then errors out, the
+            // 99% payout already moved real money, so we must not let the user retry
+            // blindly (that would re-send the 99%). The outer catch reads this flag.
+            mayHaveSent = true;
+          }
         }
-        mayHaveSent = hashes.length > 0;
         let allOk = true;
         if (hashes[0]) txHash = hashes[0]; // the 99% → recipient transfer
         for (const hash of hashes) {
@@ -1396,8 +1405,16 @@ export default function PayButton({ to, netKey, token, amount, onPaid }) {
         setError("A transfer did not confirm on-chain in time. Check your wallet or block explorer — your funds are safe and no custodial step was ever involved.");
       }
     } catch (e) {
-      setStatus("idle");
-      setError(e?.message || "Transaction was not completed.");
+      if (mayHaveSent) {
+        // A transfer was already submitted on-chain before this error — real money
+        // may have moved (e.g. the 99% payout succeeded but the 1% fee errored).
+        // Don't quietly reset the Pay button; require the user to check first.
+        setStatus("timeout");
+        setError("Something went wrong after a transfer was sent, so the payment may already be partly or fully on-chain. Check your wallet activity or a block explorer before trying again. If you're sure nothing went through, you can retry below.");
+      } else {
+        setStatus("idle");
+        setError(e?.message || "Transaction was not completed.");
+      }
     }
   };
 
