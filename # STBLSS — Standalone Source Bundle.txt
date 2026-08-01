@@ -275,8 +275,8 @@ dist-ssr
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="https://media.base44.com/images/public/6a69241a2e229db2030d9efb/25d5c289e_generated_image.png" />
-    <link rel="apple-touch-icon" href="https://media.base44.com/images/public/6a69241a2e229db2030d9efb/25d5c289e_generated_image.png" />
+    <link rel="icon" type="image/svg+xml" href="/stblss-icon.svg" />
+    <link rel="apple-touch-icon" href="/stblss-icon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#1e262e" />
@@ -609,22 +609,54 @@ export const NETWORKS = {
 
 export const TOKENS = ["USDC", "USDT"];
 
+// 1 trillion — far beyond any real stablecoin invoice, but small enough that the
+// fee/payout math stays exact in JS doubles. Blocks absurd values (incl. scientific
+// notation like "1e21") so the amount logic can never crash or overflow BigInt.
+export const MAX_AMOUNT = 1_000_000_000_000;
+
+// True when `amount` is a finite, positive, non-absurd number. Used by the
+// Generator (before building a link) and the Checkout (before showing one) so a
+// broken amount string can never reach the transfer math.
+export function isValidAmount(amount) {
+  const n = Number(amount);
+  return isFinite(n) && n > 0 && n <= MAX_AMOUNT;
+}
+
+// Force a clean, non-exponential decimal string for the URL — scientific
+// notation in a payment link (e.g. "1e3") would still decode but looks broken.
+export function normalizeAmount(amount) {
+  const n = Number(amount);
+  if (!isFinite(n)) return "";
+  return n.toString();
+}
+
 // PUBLIC, VERIFIABLE FEE MATH — anyone inspecting this file can audit the split.
 // Total "Amount Due" is split into exactly two transfers and nothing goes anywhere else:
 //   - 99%  → recipient's wallet (payout)
 //   -  1%  → platform's hardcoded fee wallet (fee)
 //   -  0%  → any other address
+// Guards non-finite/absurd inputs so splitAmount never returns garbage.
 export function splitAmount(amount) {
-  const total = Number(amount) || 0;        // the full Amount Due from the URL
+  const total = Number(amount);
+  if (!isFinite(total) || total <= 0 || total > MAX_AMOUNT) return { total: 0, fee: 0, payout: 0 };
   const fee = Math.round(total * 0.01 * 1e6) / 1e6;   // exactly 1% of the total
   const payout = Math.round((total - fee) * 1e6) / 1e6; // the remaining 99% (total − fee)
   return { total, fee, payout };
 }
 
+// Crash-proof decimal→units conversion. Scientific notation ("1e21") or an
+// oversized value used to reach BigInt("1e21") and throw a SyntaxError that
+// blanked the whole checkout page. We force fixed decimal notation via
+// Number.toFixed (never exponential for finite values), strip any sign, and
+// pad/truncate to the token's decimals — so this can never throw.
 export function toUnits(amount, decimals) {
-  const [whole, frac = ""] = String(amount).split(".");
+  const n = Number(amount);
+  if (!isFinite(n) || n < 0) return 0n;
+  const fixed = n.toFixed(decimals);
+  const [whole, frac = ""] = fixed.split(".");
   const padded = (frac + "0".repeat(decimals)).slice(0, decimals);
-  return BigInt((whole || "0") + padded);
+  const cleanWhole = (whole || "0").replace(/[^0-9]/g, "") || "0";
+  return BigInt(cleanWhole + padded);
 }
 
 // ERC-20 transfer(address,uint256) calldata
@@ -818,7 +850,7 @@ export default function PageNotFound() {
 
 ```jsx
 import React, { useState } from "react";
-import { NETWORKS, TOKENS, isEvmAddress, isChecksumValid } from "@/lib/stblss";
+import { NETWORKS, TOKENS, isEvmAddress, isChecksumValid, isValidAmount, normalizeAmount } from "@/lib/stblss";
 import InvoiceField, { fieldClass } from "@/components/InvoiceField";
 import CopyButton from "@/components/CopyButton";
 import RecipientAddressInput from "@/components/RecipientAddressInput";
@@ -837,7 +869,7 @@ export default function Generator() {
       to: form.to.trim(),
       net: form.net,
       token: form.token,
-      amt: form.amt,
+      amt: normalizeAmount(form.amt),
     });
     if (form.memo.trim()) params.set("memo", form.memo.trim());
     if (form.due) params.set("due", form.due);
@@ -847,7 +879,7 @@ export default function Generator() {
   const addr = form.to.trim();
   const addrValid = isEvmAddress(addr);
   const checksumBad = isChecksumValid(addr) === false; // EIP-55 mismatch = likely typo → hard block
-  const valid = addrValid && !checksumBad && Number(form.amt) > 0;
+  const valid = addrValid && !checksumBad && isValidAmount(form.amt);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -951,7 +983,7 @@ export default function Generator() {
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { Printer } from "lucide-react";
-import { NETWORKS, formatAmount, splitAmount, toUnits, PLATFORM_FEE_WALLET } from "@/lib/stblss";
+import { NETWORKS, formatAmount, splitAmount, toUnits, PLATFORM_FEE_WALLET, isEvmAddress, isChecksumValid, isValidAmount } from "@/lib/stblss";
 import CopyButton from "@/components/CopyButton";
 import InvoiceStatus from "@/components/InvoiceStatus";
 import PayButton from "@/components/PayButton";
@@ -973,7 +1005,12 @@ export default function Checkout() {
 
   const net = NETWORKS[netKey];
   const { fee, payout } = splitAmount(amt);
-  const invalid = !to || !(Number(amt) > 0) || !net;
+  // Block broken links before any transfer is built: a malformed recipient
+  // address, an unsupported network/token, or a non/absurd amount all render
+  // the link unusable instead of attempting a payment that could misroute funds.
+  const addrOk = isEvmAddress(to) && isChecksumValid(to) !== false;
+  const amtOk = isValidAmount(amt);
+  const invalid = !addrOk || !amtOk || !net || !net.tokens?.[token];
   const tokenInfo = net?.tokens?.[token];
   const payoutUnits = tokenInfo ? toUnits(payout, tokenInfo.decimals) : 0n;
 
@@ -989,10 +1026,20 @@ export default function Checkout() {
 
         {invalid ? (
           <div className="mt-16 rounded-3xl border border-slate-800 bg-slate-900/40 p-10 text-center">
-            <h1 className="text-2xl font-bold text-white">Payment link incomplete</h1>
-            <p className="mt-3 text-slate-400">
-              This link is missing a wallet address, network, or amount. Ask the sender for a new link.
-            </p>
+            <h1 className="text-2xl font-bold text-white">This payment link can't be used</h1>
+            {!addrOk ? (
+              <p className="mt-3 text-slate-400">
+                The wallet address in this link is missing or not a valid EVM address. STBLSS won't build a payment to an unverified address, so no funds can be sent from this page. Ask the sender for a corrected link.
+              </p>
+            ) : !amtOk ? (
+              <p className="mt-3 text-slate-400">
+                The amount in this link is missing or not a valid number. Ask the sender for a corrected link.
+              </p>
+            ) : (
+              <p className="mt-3 text-slate-400">
+                This link uses a network or token STBLSS doesn't support. Ask the sender for a new link.
+              </p>
+            )}
           </div>
         ) : paid ? (
           <div className="mt-12">
@@ -1140,8 +1187,17 @@ export default function Checkout() {
 
 ```jsx
 import React, { useState } from "react";
-import { Loader2, Wallet, ShieldCheck } from "lucide-react";
-import { NETWORKS, PLATFORM_FEE_WALLET, encodeTransfer, splitAmount, toUnits } from "@/lib/stblss";
+import { Loader2, Wallet, ShieldCheck, AlertTriangle } from "lucide-react";
+import {
+  NETWORKS,
+  PLATFORM_FEE_WALLET,
+  encodeTransfer,
+  splitAmount,
+  toUnits,
+  isEvmAddress,
+  isChecksumValid,
+  isValidAmount,
+} from "@/lib/stblss";
 
 // Poll a single transaction's receipt until mined; confirm success via status 0x1.
 // Stateless: read through the payer's OWN wallet RPC (window.ethereum) — no backend.
@@ -1190,11 +1246,17 @@ async function awaitCallsStatus(eth, id, { timeoutMs = 120000, intervalMs = 2500
 const USER_REJECTED = new Set([4001, -32001]);
 
 export default function PayButton({ to, netKey, token, amount, onPaid }) {
-  const [status, setStatus] = useState("idle"); // idle | working | confirming | paid
+  const [status, setStatus] = useState("idle"); // idle | working | confirming | paid | timeout
   const [error, setError] = useState("");
   const [flow, setFlow] = useState(null); // "batched" | "per-call" — shown for transparency
 
   const net = NETWORKS[netKey];
+
+  const resetToIdle = () => {
+    setStatus("idle");
+    setError("");
+    setFlow(null);
+  };
 
   const pay = async () => {
     setError("");
@@ -1207,10 +1269,28 @@ export default function PayButton({ to, netKey, token, amount, onPaid }) {
       setError("No browser wallet detected. Install a wallet extension such as MetaMask to continue.");
       return;
     }
+    // Block a broken recipient address before ANY transfer is encoded — a malformed
+    // address in the link never reaches the wallet, so the wrong amount can never
+    // go to the wrong place. EIP-55 checksum mismatch (=== false) = likely typo.
+    if (!isEvmAddress(to) || isChecksumValid(to) === false) {
+      setError("The recipient address in this link isn't a valid wallet address. STBLSS won't send funds to an unverified address. Ask the sender for a corrected link.");
+      return;
+    }
+    if (!isValidAmount(amount)) {
+      setError("The amount in this link isn't a valid number. Ask the sender for a corrected link.");
+      return;
+    }
 
     setStatus("working");
     try {
       const accounts = await eth.request({ method: "eth_requestAccounts" });
+      // Some wallets connect but hand back no account (locked / edge cases).
+      // Surface a clear, actionable message instead of failing deeper in the flow.
+      if (!accounts || !accounts[0]) {
+        setStatus("idle");
+        setError("Your wallet didn't return an account. Please unlock your wallet and try again.");
+        return;
+      }
       const from = accounts[0];
 
       try {
@@ -1239,6 +1319,7 @@ export default function PayButton({ to, netKey, token, amount, onPaid }) {
 
       let confirmed = false;
       let batchedAttempted = false;
+      let mayHaveSent = false; // true once any transfer is submitted on-chain — guards against a double-send on retry
       let txHash = null; // captured so onPaid can append it to the URL for exact re-verification
 
       // --- PREFERRED: EIP-5792 batched send (ONE signature, verified on-chain) ---
@@ -1257,6 +1338,7 @@ export default function PayButton({ to, netKey, token, amount, onPaid }) {
         });
         if (callsId) {
           batchedAttempted = true;
+          mayHaveSent = true;
           setFlow("batched");
           const res = await awaitCallsStatus(eth, callsId);
           confirmed = res.confirmed;
@@ -1270,8 +1352,9 @@ export default function PayButton({ to, netKey, token, amount, onPaid }) {
         } else {
           // Ambiguous: the wallet may have already submitted on-chain.
           // Do NOT fall through to per-call — that would double-send.
-          setStatus("idle");
-          setError("The batched payment couldn't be confirmed. Check your wallet or block explorer — no double charge was made.");
+          mayHaveSent = true;
+          setStatus("timeout");
+          setError("The batched payment couldn't be confirmed, but it may already be on the chain. Check your wallet activity or a block explorer before trying again. If you're sure it didn't go through, you can retry below.");
           return;
         }
       }
@@ -1287,6 +1370,7 @@ export default function PayButton({ to, netKey, token, amount, onPaid }) {
           const hash = await eth.request({ method: "eth_sendTransaction", params: [{ from, to: call.to, data: call.data }] });
           if (hash) hashes.push(hash);
         }
+        mayHaveSent = hashes.length > 0;
         let allOk = true;
         if (hashes[0]) txHash = hashes[0]; // the 99% → recipient transfer
         for (const hash of hashes) {
@@ -1299,6 +1383,14 @@ export default function PayButton({ to, netKey, token, amount, onPaid }) {
       if (confirmed) {
         setStatus("paid");
         onPaid?.(txHash);
+      } else if (mayHaveSent) {
+        // Transactions were submitted on-chain but we couldn't verify them in
+        // time. The payment may already be confirmed, so DO NOT silently re-enable
+        // the Pay button — a blind retry could genuinely send funds twice. Park in
+        // a "timeout" state that requires the user to confirm they've checked their
+        // wallet/explorer before another attempt is allowed.
+        setStatus("timeout");
+        setError("Confirmation timed out, but the payment may already be on its way on-chain. Check your wallet activity or a block explorer first. If you're sure it didn't go through, you can retry below.");
       } else {
         setStatus("idle");
         setError("A transfer did not confirm on-chain in time. Check your wallet or block explorer — your funds are safe and no custodial step was ever involved.");
@@ -1312,16 +1404,17 @@ export default function PayButton({ to, netKey, token, amount, onPaid }) {
   const label =
     status === "working" ? "Awaiting Wallet Confirmation…" :
     status === "confirming" ? "Confirming on-chain…" :
+    status === "timeout" ? "Payment may be pending" :
     "Connect Wallet & Pay Now";
 
   return (
     <div>
       <button
         onClick={pay}
-        disabled={status === "working" || status === "confirming"}
+        disabled={status === "working" || status === "confirming" || status === "timeout"}
         className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-400 px-6 py-4 text-base font-bold text-slate-950 shadow-[0_0_40px_-12px_rgba(52,211,153,0.7)] transition-all duration-300 hover:bg-emerald-300 disabled:opacity-60"
       >
-        {status === "working" || status === "confirming" ? <Loader2 className="h-5 w-5 animate-spin" /> : <Wallet className="h-5 w-5" />}
+        {status === "working" || status === "confirming" ? <Loader2 className="h-5 w-5 animate-spin" /> : status === "timeout" ? <AlertTriangle className="h-5 w-5" /> : <Wallet className="h-5 w-5" />}
         {label}
       </button>
       {status === "confirming" && (
@@ -1332,7 +1425,19 @@ export default function PayButton({ to, netKey, token, amount, onPaid }) {
             : "Verifying each transfer on-chain — every leg is confirmed, never assumed."}
         </p>
       )}
-      {error && <p className="mt-3 text-sm text-rose-400">{error}</p>}
+      {status === "timeout" && (
+        <div className="mt-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-left">
+          <p className="text-sm font-medium leading-relaxed text-amber-200">{error}</p>
+          <button
+            type="button"
+            onClick={resetToIdle}
+            className="mt-3 w-full rounded-xl border border-amber-400/50 bg-amber-400/10 px-4 py-2.5 text-sm font-bold text-amber-200 transition hover:bg-amber-400/20"
+          >
+            I've checked my wallet — try paying again
+          </button>
+        </div>
+      )}
+      {error && status !== "timeout" && <p className="mt-3 text-sm text-rose-400">{error}</p>}
     </div>
   );
 }
@@ -1793,18 +1898,6 @@ export default function Footer() {
   "theme_color": "#1e293b",
   "categories": ["finance", "productivity", "utilities"],
   "icons": [
-    {
-      "src": "https://media.base44.com/images/public/6a69241a2e229db2030d9efb/25d5c289e_generated_image.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "https://media.base44.com/images/public/6a69241a2e229db2030d9efb/25d5c289e_generated_image.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
-    },
     {
       "src": "/stblss-icon.svg",
       "sizes": "any",
