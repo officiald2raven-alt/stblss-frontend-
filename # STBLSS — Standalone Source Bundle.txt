@@ -1307,6 +1307,25 @@ export default function PayButton({ to, netKey, token, amount, onPaid }) {
         }
       }
 
+      // Pre-flight gas check: the payer's wallet pays gas in the network's
+      // native token (ETH on Base/Arbitrum). If their balance is zero the
+      // ERC-20 transfers will fail at broadcast — surface a clear, actionable
+      // warning instead of letting the wallet reject with an opaque error.
+      // Best-effort: if the RPC call fails we skip the check rather than block.
+      try {
+        const balHex = await eth.request({ method: "eth_getBalance", params: [from, "latest"] });
+        if (BigInt(balHex || "0x0") === 0n) {
+          setStatus("idle");
+          setError(
+            `Your wallet has no ${net.params.nativeCurrency.symbol} on ${net.params.chainName} to cover gas. ` +
+            `You need a tiny amount of ${net.params.nativeCurrency.symbol} (usually fractions of a cent on L2s) ` +
+            `for the two transfers to go through. Bridge or swap for a little ${net.params.nativeCurrency.symbol} ` +
+            `on ${net.label}, then retry.`
+          );
+          return;
+        }
+      } catch { /* best-effort — never block on a failed gas probe */ }
+
       // --- NON-CUSTODIAL TRANSFER BUILD ---
       // We only compile raw ERC-20 `transfer(address,uint256)` payloads and hand them
       // to the user's LOCAL browser wallet (window.ethereum) to sign and broadcast.
@@ -1997,15 +2016,19 @@ self.addEventListener("fetch", (event) => {
 
 ```svg
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="STBLSS">
-  <rect width="512" height="512" fill="#1e262e"/>
-  <g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="60">
-    <path d="M 216 112 H 376 V 256 H 216 V 400 H 376" stroke="#ffffff"/>
-    <path d="M 296 112 H 136 V 256 H 296 V 400 H 136" stroke="#00ffb3"/>
+  <rect width="512" height="512" fill="#1f2937"/>
+  <rect x="72" y="72" width="368" height="368" rx="64" fill="none" stroke="#00d1a1" stroke-width="20"/>
+  <g fill="#00d1a1">
+    <rect x="120" y="120" width="272" height="64"/>
+    <rect x="120" y="224" width="272" height="64"/>
+    <rect x="120" y="328" width="272" height="64"/>
+    <rect x="120" y="184" width="64" height="40"/>
+    <rect x="328" y="288" width="64" height="40"/>
   </g>
 </svg>
 ```
 
-> Same-origin pure-vector STBLSS monogram (interlocking S, cyan-green + white on charcoal) — used as the manifest install icon and favicon fallback. No external image dependency, so Chrome reliably treats the app as installable and shows the brand mark in the native Install prompt.
+> Same-origin pure-vector STBLSS brand mark (blocky teal "S" inside a rounded teal square on navy) — used as the favicon, apple-touch-icon, and manifest install icon. No external image dependency, so Chrome reliably treats the app as installable and shows the brand mark in the native Install prompt.
 
 === FILE: src/components/InstallPrompt.jsx ===
 
@@ -2174,4 +2197,5 @@ export default function InstallPrompt() {
 - **Exact on-chain verification by tx hash.** The moment the payer's wallet confirms a payment, `PayButton` captures the transaction hash (the 99% recipient transfer) and `Checkout` appends it to the URL as `tx=<hash>` via `window.history.replaceState` (no page reload, no backend, fully stateless). When anyone reopens that link, `InvoiceStatus` calls `checkPaymentByHash` in `src/lib/stblss.js`, which does a single `eth_getTransactionReceipt` against the network's public RPC and verifies the receipt status is `0x1` and a Transfer log to the recipient for the expected 99% payout value is present. This is instant and definitive with no block-window range limit, so an old paid invoice shows "Paid · verified on-chain" forever instead of falling back to the recent-window log scan. Links without a `tx=` param (first open, or a batched wallet that didn't expose a receipt hash) still use the original recent-window `checkPaymentStatus` scan — the new path is purely additive and changes nothing about the stateless, non-custodial core.
 - A stateless "Print or Save Receipt" button appears on the checkout page once a payment is confirmed on-chain. It fires `window.print()` and a `@media print` block in `src/index.css` hides the live UI and renders only a clean black-and-white receipt (`#stblss-receipt`) with the brand, total due, token, network, recipient, and Status: Paid. No backend, no storage — the printed/saved PDF is the only durable record.
 - STBLSS is a Progressive Web App. `public/manifest.json` declares the app with a `standalone` display, the same-origin `public/stblss-icon.svg` STBLSS monogram as the icon for both `any` and `maskable`, and a `#1e293b` slate-blue theme. `index.html` points the favicon and apple-touch-icon at the same SVG. `public/sw.js` (cache `stblss-v18`) is a lightweight service worker that caches the app shell (HTML, JS, CSS, same-origin SVG icon) so the app loads instantly and works offline on mobile networks — it never caches blockchain RPC responses, and any `/checkout?…` URL with invoice params is always fetched live from the network so stateless links are never served from stale cache. `src/components/InstallPrompt.jsx` exposes the browser's native install flow via a persistent "Install App" header button on the Generator and Checkout pages (the transient on-load mobile banner was removed in favor of the always-available button). Tapping the button triggers the native one-tap Add-to-Home-Screen dialog when the browser offers it; for browsers that don't fire `beforeinstallprompt` (iOS Safari never does, and Chrome only fires it once its install criteria are met), it instead shows clear, OS- and browser-specific "Add to Home Screen" steps (iOS Share-sheet, mobile Chrome/Edge/Samsung/Firefox/Opera menu, or desktop address-bar install icon) so the affordance is never a dead button. The installed PWA opens at the exact URL the user was on (query string included), so invoice links survive the install flow flawlessly. `src/main.jsx` registers the service worker on load as a progressive enhancement.
+- **Pre-flight gas-balance check.** Before building any transfer, `PayButton` switches to the target network and calls `eth_getBalance` on the payer's account. If the native gas balance is zero (a common L2 edge case: the payer holds USDC/USDT but no ETH on Base/Arbitrum), it stops and shows a clear, actionable warning telling them exactly which token they need and where to get it — instead of letting both transfers fail at broadcast with an opaque wallet error. The probe is best-effort: if the RPC call itself fails, the check is skipped so it never blocks a valid payment. This keeps STBLSS strictly stateless (no paymaster, no backend, no funded gas pool) while still closing the "I have stablecoins but no gas" gap.
 - Update the GitHub URL in `src/components/Footer.jsx` if your repo URL changes.
